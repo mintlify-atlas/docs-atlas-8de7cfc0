@@ -1,0 +1,116 @@
+---
+title: 'Basic Chat Completion'
+description: 'Learn how to create a basic chat completion request with the OpenAI Ruby SDK'
+---
+
+## Overview
+
+This example demonstrates how to create a simple chat completion using the OpenAI Ruby SDK. Chat completions are the foundation of interacting with GPT models for conversational AI applications.
+
+## Prerequisites
+
+Before running this example, ensure you have:
+
+<Steps>
+  <Step title="Install the SDK">
+    ```bash
+    gem install openai
+    ```
+  </Step>
+  
+  <Step title="Set your API key">
+    Set the `OPENAI_API_KEY` environment variable:
+    ```bash
+    export OPENAI_API_KEY='your-api-key-here'
+    ```
+  </Step>
+</Steps>
+
+## Basic Example
+
+Here's a complete example of creating a basic chat completion:
+
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+# typed: strong
+
+require_relative "../lib/openai"
+
+# gets API Key from environment variable `OPENAI_API_KEY`
+client = OpenAI::Client.new
+
+begin
+  # Non-streaming:
+  pp("----- standard request -----")
+
+  completion = client.chat.completions.create(
+    model: "gpt-4",
+    messages: [
+      {
+        role: "user",
+        content: "Say this is a test"
+      }
+    ]
+  )
+
+  pp(completion.choices.first&.message&.content)
+end
+```
+
+## Key Concepts
+
+### Client Initialization
+
+The SDK automatically reads your API key from the `OPENAI_API_KEY` environment variable:
+
+```ruby
+client = OpenAI::Client.new
+```
+
+### Creating a Completion
+
+Use the `chat.completions.create` method to send a request:
+
+```ruby
+completion = client.chat.completions.create(
+  model: "gpt-4",
+  messages: [
+    {
+      role: "user",
+      content: "Say this is a test"
+    }
+  ]
+)
+```
+
+### Accessing the Response
+
+The response contains an array of choices. Each choice has a message with the generated content:
+
+```ruby
+pp(completion.choices.first&.message&.content)
+```
+
+<Note>
+  The `&.` operator is Ruby's safe navigation operator, which prevents errors if the value is `nil`.
+</Note>
+
+## Message Roles
+
+Chat completions support three primary message roles:
+
+- **`user`** - Messages from the end user
+- **`assistant`** - Messages from the AI assistant
+- **`system`** - Instructions that guide the assistant's behavior
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Streaming Responses" href="/examples/chat/streaming">
+    Learn how to stream chat completions for real-time responses
+  </Card>
+  <Card title="Function Calling" href="/examples/chat/tools">
+    Integrate tools and function calling into your chat completions
+  </Card>
+</CardGroup>

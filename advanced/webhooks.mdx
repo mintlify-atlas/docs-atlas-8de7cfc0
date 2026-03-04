@@ -1,0 +1,429 @@
+---
+title: Webhooks
+description: Verify and parse webhook events using unwrap and verify_signature methods
+---
+
+The OpenAI Ruby SDK provides utilities for verifying and parsing webhook events from OpenAI. Webhook verification is optional but strongly encouraged for security.
+
+For more information about webhooks, see [the OpenAI API documentation](https://platform.openai.com/docs/guides/webhooks).
+
+## Setup
+
+Initialize the client with your webhook secret:
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new(
+  webhook_secret: ENV['OPENAI_WEBHOOK_SECRET']
+)
+```
+
+<Note>
+The webhook secret is available in your OpenAI dashboard. Store it securely in an environment variable.
+</Note>
+
+## Unwrap Method (Recommended)
+
+The `unwrap` method verifies the webhook signature and parses the payload in one step:
+
+```ruby
+require 'sinatra'
+require 'openai'
+
+# Set up the client with webhook secret from environment variable
+client = OpenAI::Client.new(webhook_secret: ENV['OPENAI_WEBHOOK_SECRET'])
+
+post '/webhook' do
+  request_body = request.body.read
+
+  begin
+    event = client.webhooks.unwrap(request_body, request.env)
+
+    case event.type
+    when 'response.completed'
+      puts "Response completed: #{event.data}"
+    when 'response.failed'
+      puts "Response failed: #{event.data}"
+    else
+      puts "Unhandled event type: #{event.type}"
+    end
+
+    status 200
+    'ok'
+  rescue StandardError => e
+    puts "Invalid signature: #{e}"
+    status 400
+    'Invalid signature'
+  end
+end
+```
+
+<Warning>
+The `body` parameter must be the raw JSON string sent from the server. Do not parse it before passing to `unwrap` - the method will parse it for you after verifying the signature.
+</Warning>
+
+## Verify Signature Method
+
+If you prefer to verify and parse separately, use `verify_signature`:
+
+```ruby
+require 'sinatra'
+require 'json'
+require 'openai'
+
+# Set up the client with webhook secret from environment variable
+client = OpenAI::Client.new(webhook_secret: ENV['OPENAI_WEBHOOK_SECRET'])
+
+post '/webhook' do
+  request_body = request.body.read
+
+  begin
+    # Verify the signature
+    client.webhooks.verify_signature(request_body, request.env)
+
+    # Parse the body after verification
+    event = JSON.parse(request_body)
+    puts "Verified event: #{event}"
+
+    status 200
+    'ok'
+  rescue StandardError => e
+    puts "Invalid signature: #{e}"
+    status 400
+    'Invalid signature'
+  end
+end
+```
+
+<Note>
+Like `unwrap`, the `body` parameter must be the raw JSON string. Parse it yourself only after verification succeeds.
+</Note>
+
+## Comparison: Unwrap vs Verify
+
+<Tabs>
+  <Tab title="unwrap (Recommended)">
+    ```ruby
+    # Verify AND parse in one step
+    event = client.webhooks.unwrap(request_body, request.env)
+
+    # event is already a parsed object
+    case event.type
+    when 'response.completed'
+      # Handle event
+    end
+    ```
+
+    **Benefits:**
+    - Single method call
+    - Returns parsed event object
+    - Less code to maintain
+    - Recommended for most use cases
+  </Tab>
+
+  <Tab title="verify_signature">
+    ```ruby
+    # Verify signature only
+    client.webhooks.verify_signature(request_body, request.env)
+
+    # Then parse manually
+    event = JSON.parse(request_body)
+
+    # Handle event
+    ```
+
+    **Use when:**
+    - You need custom JSON parsing logic
+    - You want to inspect raw JSON before parsing
+    - You're integrating with existing parsing code
+  </Tab>
+</Tabs>
+
+## Framework Examples
+
+<CodeGroup>
+```ruby Sinatra
+require 'sinatra'
+require 'openai'
+
+client = OpenAI::Client.new(
+  webhook_secret: ENV['OPENAI_WEBHOOK_SECRET']
+)
+
+post '/webhook' do
+  request_body = request.body.read
+
+  begin
+    event = client.webhooks.unwrap(request_body, request.env)
+
+    # Handle event
+    puts "Received: #{event.type}"
+
+    status 200
+    'ok'
+  rescue StandardError => e
+    status 400
+    'Invalid signature'
+  end
+end
+```
+
+```ruby Rails
+class WebhooksController < ApplicationController
+  skip_before_action :verify_authenticity_token
+
+  def create
+    client = OpenAI::Client.new(
+      webhook_secret: ENV['OPENAI_WEBHOOK_SECRET']
+    )
+
+    begin
+      event = client.webhooks.unwrap(
+        request.raw_post,
+        request.env
+      )
+
+      # Handle event
+      case event.type
+      when 'response.completed'
+        handle_response_completed(event)
+      when 'response.failed'
+        handle_response_failed(event)
+      end
+
+      head :ok
+    rescue StandardError => e
+      Rails.logger.error "Webhook verification failed: #{e}"
+      head :bad_request
+    end
+  end
+
+  private
+
+  def handle_response_completed(event)
+    # Your logic here
+  end
+
+  def handle_response_failed(event)
+    # Your logic here
+  end
+end
+```
+
+```ruby Rack
+require 'openai'
+
+class WebhookHandler
+  def initialize(app)
+    @app = app
+    @client = OpenAI::Client.new(
+      webhook_secret: ENV['OPENAI_WEBHOOK_SECRET']
+    )
+  end
+
+  def call(env)
+    if env['PATH_INFO'] == '/webhook' && env['REQUEST_METHOD'] == 'POST'
+      request = Rack::Request.new(env)
+      body = request.body.read
+
+      begin
+        event = @client.webhooks.unwrap(body, env)
+
+        # Handle event
+        puts "Event: #{event.type}"
+
+        [200, {'Content-Type' => 'text/plain'}, ['ok']]
+      rescue StandardError => e
+        [400, {'Content-Type' => 'text/plain'}, ['Invalid signature']]
+      end
+    else
+      @app.call(env)
+    end
+  end
+end
+```
+</CodeGroup>
+
+## Event Types
+
+Common webhook event types:
+
+```ruby
+event = client.webhooks.unwrap(request_body, request.env)
+
+case event.type
+when 'response.completed'
+  # A response has completed successfully
+  response_id = event.data.id
+  output = event.data.output
+
+when 'response.failed'
+  # A response has failed
+  error = event.data.error
+  puts "Error: #{error.message}"
+
+when 'response.streaming.delta'
+  # Streaming delta received
+  delta = event.data.delta
+
+when 'batch.completed'
+  # Batch processing completed
+  batch_id = event.data.id
+
+when 'batch.failed'
+  # Batch processing failed
+  error = event.data.error
+
+else
+  puts "Unhandled event type: #{event.type}"
+end
+```
+
+## Error Handling
+
+```ruby
+post '/webhook' do
+  request_body = request.body.read
+
+  begin
+    event = client.webhooks.unwrap(request_body, request.env)
+
+    # Process event
+    process_webhook_event(event)
+
+    status 200
+    'ok'
+  rescue OpenAI::Errors::WebhookSignatureError => e
+    # Invalid signature
+    logger.error "Invalid webhook signature: #{e.message}"
+    status 401
+    'Unauthorized'
+  rescue JSON::ParserError => e
+    # Invalid JSON
+    logger.error "Invalid webhook payload: #{e.message}"
+    status 400
+    'Bad Request'
+  rescue StandardError => e
+    # Other errors
+    logger.error "Webhook processing error: #{e.message}"
+    status 500
+    'Internal Server Error'
+  end
+end
+```
+
+## Testing Webhooks
+
+### Testing with Mock Data
+
+```ruby
+require 'rspec'
+require 'rack/test'
+
+RSpec.describe 'Webhook Handler' do
+  include Rack::Test::Methods
+
+  let(:client) do
+    OpenAI::Client.new(
+      webhook_secret: 'test_secret'
+    )
+  end
+
+  it 'processes valid webhook' do
+    # You would need to generate a valid signature here
+    # This is a simplified example
+    payload = {
+      type: 'response.completed',
+      data: { id: 'resp_123' }
+    }.to_json
+
+    post '/webhook', payload, {
+      'CONTENT_TYPE' => 'application/json',
+      'HTTP_X_OPENAI_SIGNATURE' => generate_signature(payload)
+    }
+
+    expect(last_response.status).to eq(200)
+  end
+
+  it 'rejects invalid signature' do
+    payload = { type: 'response.completed' }.to_json
+
+    post '/webhook', payload, {
+      'CONTENT_TYPE' => 'application/json',
+      'HTTP_X_OPENAI_SIGNATURE' => 'invalid_signature'
+    }
+
+    expect(last_response.status).to eq(400)
+  end
+end
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Always verify signatures in production">
+    Webhook verification prevents malicious actors from sending fake events to your endpoint.
+  </Step>
+
+  <Step title="Use the unwrap method">
+    The `unwrap` method is simpler and less error-prone than manual verification and parsing.
+  </Step>
+
+  <Step title="Store webhook secrets securely">
+    Never hardcode webhook secrets. Use environment variables or a secure configuration system.
+  </Step>
+
+  <Step title="Return 200 quickly">
+    Process events asynchronously if possible. OpenAI expects a quick 200 response to confirm receipt.
+  </Step>
+
+  <Step title="Handle unknown event types gracefully">
+    New event types may be added. Log unknown events instead of failing.
+  </Step>
+
+  <Step title="Implement idempotency">
+    Webhooks may be delivered more than once. Use event IDs to prevent duplicate processing.
+  </Step>
+</Steps>
+
+## Asynchronous Processing
+
+For long-running event processing, queue events for background processing:
+
+```ruby
+require 'sidekiq'
+
+class WebhookProcessor
+  include Sidekiq::Worker
+
+  def perform(event_json)
+    event = JSON.parse(event_json)
+
+    case event['type']
+    when 'response.completed'
+      # Process completed response
+    when 'response.failed'
+      # Handle failed response
+    end
+  end
+end
+
+post '/webhook' do
+  request_body = request.body.read
+
+  begin
+    # Verify and parse
+    event = client.webhooks.unwrap(request_body, request.env)
+
+    # Queue for background processing
+    WebhookProcessor.perform_async(event.to_json)
+
+    status 200
+    'ok'
+  rescue StandardError => e
+    status 400
+    'Invalid signature'
+  end
+end
+```

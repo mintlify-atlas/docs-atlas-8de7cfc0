@@ -1,0 +1,162 @@
+---
+title: Sorbet Type Definitions
+description: Use Sorbet's static type checker with the OpenAI Ruby SDK's comprehensive RBI definitions
+---
+
+The OpenAI Ruby SDK provides comprehensive [RBI](https://sorbet.org/docs/rbi) definitions for use with [Sorbet](https://sorbet.org), Ruby's static type checker. The library has **no runtime dependency** on `sorbet-runtime`, so you can use Sorbet for development-time type checking without any performance overhead.
+
+## Type-Safe Parameters
+
+You can use typed parameter classes for full type safety:
+
+```ruby
+openai.chat.completions.create(
+  messages: [OpenAI::Chat::ChatCompletionUserMessageParam.new(content: "Say this is a test")],
+  model: "gpt-5.2"
+)
+```
+
+### Hash Parameters (Not Type-Safe)
+
+Hashes work but don't provide type safety:
+
+```ruby
+# This works but Sorbet won't catch type errors:
+openai.chat.completions.create(
+  messages: [{role: "user", content: "Say this is a test"}],
+  model: "gpt-5.2"
+)
+```
+
+### Using Params Classes
+
+You can also construct and splat full parameter objects:
+
+```ruby
+params = OpenAI::Chat::CompletionCreateParams.new(
+  messages: [OpenAI::Chat::ChatCompletionUserMessageParam.new(content: "Say this is a test")],
+  model: "gpt-5.2"
+)
+
+openai.chat.completions.create(**params)
+```
+
+<Note>
+Using typed parameter classes helps Sorbet catch errors at development time, such as typos in field names or incorrect types.
+</Note>
+
+## Enums and Tagged Symbols
+
+Since this library doesn't depend on `sorbet-runtime`, it cannot provide [`T::Enum`](https://sorbet.org/docs/tenum) instances. Instead, the SDK uses **tagged symbols** — primitives at runtime with rich type information for Sorbet.
+
+### Accessing Enum Constants
+
+```ruby
+# Returns the symbol :"in-memory"
+puts(OpenAI::Chat::CompletionCreateParams::PromptCacheRetention::IN_MEMORY)
+
+# Revealed type: `T.all(OpenAI::Chat::CompletionCreateParams::PromptCacheRetention, Symbol)`
+T.reveal_type(OpenAI::Chat::CompletionCreateParams::PromptCacheRetention::IN_MEMORY)
+```
+
+### Using Enums in Requests
+
+Enum parameters accept both the constant and its literal value:
+
+<Tabs>
+  <Tab title="Using Constants (Recommended)">
+    ```ruby
+    # Using the enum constants preserves tagged type information
+    openai.chat.completions.create(
+      prompt_cache_retention: OpenAI::Chat::CompletionCreateParams::PromptCacheRetention::IN_MEMORY,
+      messages: [{role: "user", content: "Hello"}],
+      model: "gpt-5.2"
+    )
+    ```
+  </Tab>
+  <Tab title="Using Literal Values">
+    ```ruby
+    # Literal values also work
+    openai.chat.completions.create(
+      prompt_cache_retention: :"in-memory",
+      messages: [{role: "user", content: "Hello"}],
+      model: "gpt-5.2"
+    )
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+Using the enum constants (rather than literal symbols) provides better autocomplete and type checking in your editor.
+</Tip>
+
+## RBI Files
+
+The SDK ships with RBI files in the `rbi/` directory of the gem. These are automatically discovered by Sorbet when you include the gem in your project.
+
+### Setting Up Sorbet
+
+<Steps>
+  <Step title="Install Sorbet">
+    Add Sorbet to your Gemfile:
+    ```ruby
+    gem 'sorbet'
+    gem 'sorbet-runtime'  # Optional, only if you want runtime checks
+    ```
+  </Step>
+  
+  <Step title="Initialize Sorbet">
+    Run Sorbet's initialization command:
+    ```bash
+    bundle exec srb init
+    ```
+  </Step>
+  
+  <Step title="Type Check Your Code">
+    Run the type checker:
+    ```bash
+    bundle exec srb tc
+    ```
+  </Step>
+</Steps>
+
+## Type-Safe Response Handling
+
+Response objects are also fully typed:
+
+```ruby
+completion = openai.chat.completions.create(
+  messages: [{role: "user", content: "Hello"}],
+  model: "gpt-5.2"
+)
+
+# Sorbet knows the shape of the response
+message = completion.choices[0].message
+content = message.content  # Type: String | nil
+
+# Sorbet will catch this error:
+# invalid_field = completion.invalid_field  # Method not found
+```
+
+## Non-Breaking Type Changes
+
+<Info>
+The OpenAI Ruby SDK considers improvements to `*.rbi` and `*.rbs` type definitions to be **non-breaking changes** according to SemVer. Type definitions may be refined in patch releases.
+</Info>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="RBS Types" icon="file-code" href="/types/rbs">
+    RBS type signature definitions
+  </Card>
+  <Card title="BaseModel" icon="cube" href="/types/base-model">
+    BaseModel conveniences and helpers
+  </Card>
+  <Card title="Structured Outputs" icon="shapes" href="/advanced/structured-outputs">
+    Type-safe structured outputs
+  </Card>
+  <Card title="Sorbet Documentation" icon="arrow-up-right-from-square" href="https://sorbet.org/docs">
+    Official Sorbet documentation
+  </Card>
+</CardGroup>

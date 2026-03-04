@@ -1,0 +1,547 @@
+---
+title: Fine-tuning
+description: Create and manage fine-tuning jobs to customize models for your specific use case
+---
+
+The Fine-tuning API allows you to create custom models by training on your own data. Fine-tuning can improve model performance on specific tasks and reduce costs by using smaller, specialized models.
+
+## Create a fine-tuning job
+
+Creates a fine-tuning job which begins the process of creating a new model from a given dataset.
+
+```ruby
+client.fine_tuning.jobs.create(params)
+```
+
+<ParamField path="model" type="String" required>
+  The name of the model to fine-tune. You can select one of the supported models:
+  - `gpt-4o-2024-08-06`
+  - `gpt-4o-mini-2024-07-18`
+  - `gpt-3.5-turbo`
+</ParamField>
+
+<ParamField path="training_file" type="String" required>
+  The ID of an uploaded file that contains training data. The file must be formatted as a JSONL file.
+</ParamField>
+
+<ParamField path="hyperparameters" type="Object">
+  The hyperparameters used for the fine-tuning job.
+  
+  <Expandable title="Hyperparameters properties">
+    <ParamField path="batch_size" type="Integer | String">
+      Number of examples in each batch. Can be an integer or `auto` for automatic selection.
+    </ParamField>
+    
+    <ParamField path="learning_rate_multiplier" type="Float | String">
+      Scaling factor for the learning rate. Can be a float or `auto`.
+    </ParamField>
+    
+    <ParamField path="n_epochs" type="Integer | String">
+      The number of epochs to train the model for. Can be an integer or `auto`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="suffix" type="String">
+  A string of up to 64 characters that will be added to your fine-tuned model name. For example, a suffix of "custom-model" would produce a model name like `ft:gpt-3.5-turbo:my-org:custom-model:id`.
+</ParamField>
+
+<ParamField path="validation_file" type="String">
+  The ID of an uploaded file that contains validation data. If provided, this data is used to generate validation metrics during fine-tuning.
+</ParamField>
+
+<ParamField path="integrations" type="Array">
+  A list of integrations to enable for your fine-tuning job (e.g., Weights & Biases).
+</ParamField>
+
+<ParamField path="seed" type="Integer">
+  The seed controls the reproducibility of the job. Passing in the same seed and job parameters should produce the same results.
+</ParamField>
+
+<ParamField path="method_" type="Object">
+  The method used for fine-tuning.
+  
+  <Expandable title="Method properties">
+    <ParamField path="type" type="String">
+      The type of fine-tuning method. Options: `supervised`, `dpo` (Direct Preference Optimization).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="metadata" type="Hash">
+  Set of 16 key-value pairs that can be attached to an object for storing additional information.
+</ParamField>
+
+### Response
+
+Returns a `FineTuningJob` object.
+
+<ResponseField name="id" type="String">
+  The fine-tuning job identifier.
+</ResponseField>
+
+<ResponseField name="object" type="String">
+  The object type, always `fine_tuning.job`.
+</ResponseField>
+
+<ResponseField name="model" type="String">
+  The base model being fine-tuned.
+</ResponseField>
+
+<ResponseField name="created_at" type="Integer">
+  Unix timestamp of when the job was created.
+</ResponseField>
+
+<ResponseField name="finished_at" type="Integer">
+  Unix timestamp of when the job finished.
+</ResponseField>
+
+<ResponseField name="fine_tuned_model" type="String">
+  The name of the fine-tuned model that is being created. The value will be null if the job is still running.
+</ResponseField>
+
+<ResponseField name="organization_id" type="String">
+  The organization that owns the fine-tuning job.
+</ResponseField>
+
+<ResponseField name="status" type="String">
+  The current status of the job: `validating_files`, `queued`, `running`, `succeeded`, `failed`, or `cancelled`.
+</ResponseField>
+
+<ResponseField name="training_file" type="String">
+  The file ID used for training.
+</ResponseField>
+
+<ResponseField name="validation_file" type="String">
+  The file ID used for validation.
+</ResponseField>
+
+<ResponseField name="hyperparameters" type="Object">
+  The hyperparameters used for the fine-tuning job.
+</ResponseField>
+
+<ResponseField name="trained_tokens" type="Integer">
+  The total number of tokens trained.
+</ResponseField>
+
+### Examples
+
+#### Create a basic fine-tuning job
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+# First, upload your training data
+training_file = client.files.create(
+  file: File.open("training_data.jsonl"),
+  purpose: :fine_tune
+)
+
+# Create the fine-tuning job
+job = client.fine_tuning.jobs.create(
+  model: "gpt-3.5-turbo",
+  training_file: training_file.id
+)
+
+puts "Job ID: #{job.id}"
+puts "Status: #{job.status}"
+```
+
+#### Fine-tuning with hyperparameters
+
+```ruby
+job = client.fine_tuning.jobs.create(
+  model: "gpt-4o-mini-2024-07-18",
+  training_file: training_file.id,
+  hyperparameters: {
+    n_epochs: 3,
+    batch_size: 4,
+    learning_rate_multiplier: 0.1
+  },
+  suffix: "my-custom-model"
+)
+
+puts "Fine-tuning job created: #{job.id}"
+```
+
+#### With validation data
+
+```ruby
+# Upload training and validation files
+training_file = client.files.create(
+  file: File.open("train.jsonl"),
+  purpose: :fine_tune
+)
+
+validation_file = client.files.create(
+  file: File.open("validation.jsonl"),
+  purpose: :fine_tune
+)
+
+# Create job with validation
+job = client.fine_tuning.jobs.create(
+  model: "gpt-3.5-turbo",
+  training_file: training_file.id,
+  validation_file: validation_file.id,
+  metadata: {
+    project: "customer-support",
+    version: "v1"
+  }
+)
+
+puts "Job #{job.id} created with validation data"
+```
+
+## Retrieve a fine-tuning job
+
+Get info about a fine-tuning job.
+
+```ruby
+client.fine_tuning.jobs.retrieve(fine_tuning_job_id)
+```
+
+<ParamField path="fine_tuning_job_id" type="String" required>
+  The ID of the fine-tuning job.
+</ParamField>
+
+### Examples
+
+#### Check job status
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+job = client.fine_tuning.jobs.retrieve("ftjob-abc123")
+
+puts "Status: #{job.status}"
+puts "Model: #{job.fine_tuned_model}" if job.fine_tuned_model
+puts "Trained tokens: #{job.trained_tokens}"
+```
+
+#### Monitor job progress
+
+```ruby
+def wait_for_fine_tuning(client, job_id)
+  loop do
+    job = client.fine_tuning.jobs.retrieve(job_id)
+    puts "Status: #{job.status}"
+    
+    case job.status
+    when "succeeded"
+      puts "Fine-tuning completed! Model: #{job.fine_tuned_model}"
+      return job
+    when "failed", "cancelled"
+      puts "Fine-tuning #{job.status}"
+      return job
+    end
+    
+    sleep 60  # Check every minute
+  end
+end
+
+job = client.fine_tuning.jobs.create(
+  model: "gpt-3.5-turbo",
+  training_file: training_file_id
+)
+
+final_job = wait_for_fine_tuning(client, job.id)
+```
+
+## List fine-tuning jobs
+
+List your organization's fine-tuning jobs.
+
+```ruby
+client.fine_tuning.jobs.list(params = {})
+```
+
+<ParamField path="limit" type="Integer" default="20">
+  Number of fine-tuning jobs to retrieve.
+</ParamField>
+
+<ParamField path="after" type="String">
+  Identifier for the last job from the previous pagination request.
+</ParamField>
+
+<ParamField path="metadata" type="Hash">
+  Optional metadata filter. Use the syntax `metadata[key]=value`.
+</ParamField>
+
+### Examples
+
+#### List all jobs
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+jobs = client.fine_tuning.jobs.list
+
+jobs.data.each do |job|
+  puts "#{job.id} - #{job.status} - #{job.model}"
+end
+```
+
+#### Filter by metadata
+
+```ruby
+jobs = client.fine_tuning.jobs.list(
+  metadata: {project: "customer-support"}
+)
+
+puts "Customer support fine-tuning jobs:"
+jobs.data.each do |job|
+  puts "- #{job.id}: #{job.status}"
+end
+```
+
+#### Paginate through jobs
+
+```ruby
+# Get first page
+page1 = client.fine_tuning.jobs.list(limit: 10)
+
+page1.data.each do |job|
+  puts job.id
+end
+
+# Get next page
+if page1.data.any?
+  page2 = client.fine_tuning.jobs.list(
+    limit: 10,
+    after: page1.data.last.id
+  )
+  
+  page2.data.each do |job|
+    puts job.id
+  end
+end
+```
+
+## Cancel a fine-tuning job
+
+Immediately cancel a fine-tune job.
+
+```ruby
+client.fine_tuning.jobs.cancel(fine_tuning_job_id)
+```
+
+<ParamField path="fine_tuning_job_id" type="String" required>
+  The ID of the fine-tuning job to cancel.
+</ParamField>
+
+### Examples
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+job = client.fine_tuning.jobs.cancel("ftjob-abc123")
+
+puts "Job #{job.id} status: #{job.status}"
+```
+
+## Pause and resume jobs
+
+### Pause a job
+
+```ruby
+client.fine_tuning.jobs.pause(fine_tuning_job_id)
+```
+
+### Resume a job
+
+```ruby
+client.fine_tuning.jobs.resume(fine_tuning_job_id)
+```
+
+### Examples
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+# Pause a running job
+job = client.fine_tuning.jobs.pause("ftjob-abc123")
+puts "Job paused: #{job.status}"
+
+# Resume it later
+job = client.fine_tuning.jobs.resume("ftjob-abc123")
+puts "Job resumed: #{job.status}"
+```
+
+## List fine-tuning events
+
+Get status updates for a fine-tuning job.
+
+```ruby
+client.fine_tuning.jobs.list_events(fine_tuning_job_id, params = {})
+```
+
+<ParamField path="fine_tuning_job_id" type="String" required>
+  The ID of the fine-tuning job to get events for.
+</ParamField>
+
+<ParamField path="limit" type="Integer" default="20">
+  Number of events to retrieve.
+</ParamField>
+
+<ParamField path="after" type="String">
+  Identifier for the last event from the previous pagination request.
+</ParamField>
+
+### Examples
+
+#### View job events
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+events = client.fine_tuning.jobs.list_events("ftjob-abc123")
+
+events.data.each do |event|
+  puts "#{Time.at(event.created_at)}: #{event.message}"
+end
+```
+
+#### Stream events in real-time
+
+```ruby
+def stream_job_events(client, job_id)
+  last_event_id = nil
+  
+  loop do
+    events = client.fine_tuning.jobs.list_events(
+      job_id,
+      after: last_event_id
+    )
+    
+    events.data.each do |event|
+      puts event.message
+      last_event_id = event.id
+    end
+    
+    # Check job status
+    job = client.fine_tuning.jobs.retrieve(job_id)
+    break if ["succeeded", "failed", "cancelled"].include?(job.status)
+    
+    sleep 10
+  end
+end
+
+stream_job_events(client, "ftjob-abc123")
+```
+
+## Checkpoints
+
+Access intermediate checkpoints from a fine-tuning job.
+
+```ruby
+checkpoints = client.fine_tuning.jobs.checkpoints.list("ftjob-abc123")
+
+checkpoints.data.each do |checkpoint|
+  puts "Step #{checkpoint.step_number}: #{checkpoint.metrics}"
+end
+```
+
+## Training data format
+
+Fine-tuning data must be in JSONL format with the following structure:
+
+### Chat format
+
+```jsonl
+{"messages": [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": "What is the capital of France?"}, {"role": "assistant", "content": "The capital of France is Paris."}]}
+{"messages": [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": "Who wrote Romeo and Juliet?"}, {"role": "assistant", "content": "William Shakespeare wrote Romeo and Juliet."}]}
+```
+
+### Function calling format
+
+```jsonl
+{"messages": [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": "What's the weather in Boston?"}, {"role": "assistant", "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "get_weather", "arguments": "{\"location\": \"Boston, MA\"}"}}]}]}
+```
+
+## Best practices
+
+- **Data quality**: Use high-quality, diverse training examples (minimum 10, recommended 50-100)
+- **Data format**: Validate your JSONL files before uploading
+- **Hyperparameters**: Start with `auto` and adjust based on validation metrics
+- **Validation set**: Always include a validation file to monitor overfitting
+- **Monitor progress**: Use events to track training progress
+- **Test thoroughly**: Evaluate your fine-tuned model before production use
+- **Version control**: Use suffixes and metadata to track different model versions
+- **Cost awareness**: Fine-tuning and using fine-tuned models incurs costs
+
+## Complete example
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+# 1. Upload training data
+puts "Uploading training data..."
+training_file = client.files.create(
+  file: File.open("training.jsonl"),
+  purpose: :fine_tune
+)
+
+puts "Waiting for file processing..."
+sleep 5
+
+# 2. Create fine-tuning job
+puts "Creating fine-tuning job..."
+job = client.fine_tuning.jobs.create(
+  model: "gpt-3.5-turbo",
+  training_file: training_file.id,
+  suffix: "my-app-v1",
+  hyperparameters: {
+    n_epochs: 3
+  }
+)
+
+puts "Job ID: #{job.id}"
+
+# 3. Monitor progress
+loop do
+  job = client.fine_tuning.jobs.retrieve(job.id)
+  puts "Status: #{job.status}"
+  
+  case job.status
+  when "succeeded"
+    puts "Fine-tuning complete!"
+    puts "Model: #{job.fine_tuned_model}"
+    break
+  when "failed", "cancelled"
+    puts "Fine-tuning #{job.status}"
+    break
+  end
+  
+  sleep 60
+end
+
+# 4. Use the fine-tuned model
+if job.status == "succeeded"
+  response = client.chat.completions.create(
+    model: job.fine_tuned_model,
+    messages: [{role: "user", content: "Hello!"}]
+  )
+  
+  puts response.choices.first.message.content
+end
+```
+
+## Related
+
+- [Fine-tuning guide](https://platform.openai.com/docs/guides/fine-tuning)
+- [Files API](/api/files)
+- [Chat Completions API](/api/chat)

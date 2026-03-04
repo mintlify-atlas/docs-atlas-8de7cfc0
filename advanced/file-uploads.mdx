@@ -1,0 +1,259 @@
+---
+title: File Uploads
+description: Upload files using Pathname, StringIO, FilePart, and raw file contents
+---
+
+The OpenAI Ruby SDK provides flexible options for uploading files to the API. You can use file paths, raw contents, or specialized objects to control upload behavior.
+
+## Using Pathname
+
+The `Pathname` class is recommended for file uploads as it sends the filename and avoids loading large files into memory:
+
+```ruby
+require "openai"
+require "pathname"
+
+client = OpenAI::Client.new
+
+# Use Pathname to send the filename and avoid paging a large file into memory
+file_object = client.files.create(
+  file: Pathname("input.jsonl"),
+  purpose: "fine-tune"
+)
+
+puts(file_object.id)
+```
+
+<Note>
+`Pathname` is the recommended approach as it:
+- Automatically includes the filename in the upload
+- Streams the file without loading it entirely into memory
+- Enables automatic retries on failure
+</Note>
+
+## Using Raw File Contents
+
+You can pass raw file contents directly as a string:
+
+```ruby
+# Read file contents into memory
+file_object = client.files.create(
+  file: File.read("input.jsonl"),
+  purpose: "fine-tune"
+)
+
+puts(file_object.id)
+```
+
+<Warning>
+Reading files into memory is not recommended for large files as it can consume significant memory.
+</Warning>
+
+## Using StringIO
+
+For in-memory file-like objects, use `StringIO`:
+
+```ruby
+require "stringio"
+
+# Create file content in memory
+content = <<~JSONL
+  {"prompt": "What is 2+2?", "completion": "4"}
+  {"prompt": "What is the capital of France?", "completion": "Paris"}
+JSONL
+
+file_object = client.files.create(
+  file: StringIO.new(content),
+  purpose: "fine-tune"
+)
+
+puts(file_object.id)
+```
+
+## Using FilePart for Custom Control
+
+The `OpenAI::FilePart` class gives you control over filename and content type:
+
+```ruby
+require "pathname"
+
+# Control the filename and content type
+image = OpenAI::FilePart.new(
+  Pathname('dog.jpg'),
+  content_type: 'image/jpeg'
+)
+
+edited = client.images.edit(
+  prompt: "make this image look like a painting",
+  model: "gpt-image-1",
+  size: '1024x1024',
+  image: image
+)
+
+puts(edited.data.first)
+```
+
+### FilePart with StringIO
+
+```ruby
+require "stringio"
+
+image_data = File.binread("photo.png")
+image = OpenAI::FilePart.new(
+  StringIO.new(image_data),
+  filename: "photo.png",
+  content_type: "image/png"
+)
+
+response = client.images.edit(
+  image: image,
+  prompt: "Add a sunset in the background",
+  model: "gpt-image-1",
+  size: "1024x1024"
+)
+```
+
+## Using Raw IO Descriptors
+
+You can pass raw `IO` descriptors, but this disables retries:
+
+```ruby
+File.open("input.jsonl", "rb") do |file|
+  file_object = client.files.create(
+    file: file,
+    purpose: "fine-tune"
+  )
+
+  puts(file_object.id)
+end
+```
+
+<Warning>
+Raw `IO` descriptors disable automatic retries because the SDK cannot determine if the descriptor is a file (which can be rewound) or a pipe (which cannot).
+</Warning>
+
+## File Upload Examples
+
+<Tabs>
+  <Tab title="Fine-tuning Dataset">
+    ```ruby
+    require "pathname"
+
+    # Upload training data for fine-tuning
+    training_file = client.files.create(
+      file: Pathname("training_data.jsonl"),
+      purpose: "fine-tune"
+    )
+
+    validation_file = client.files.create(
+      file: Pathname("validation_data.jsonl"),
+      purpose: "fine-tune"
+    )
+
+    # Use in fine-tuning job
+    job = client.fine_tuning.jobs.create(
+      training_file: training_file.id,
+      validation_file: validation_file.id,
+      model: "gpt-4o-2024-08-06"
+    )
+    ```
+  </Tab>
+
+  <Tab title="Image Editing">
+    ```ruby
+    require "pathname"
+
+    # Upload and edit an image
+    image = OpenAI::FilePart.new(
+      Pathname("original.png"),
+      content_type: "image/png"
+    )
+
+    result = client.images.edit(
+      image: image,
+      prompt: "Add a blue sky",
+      model: "gpt-image-1",
+      size: "1024x1024"
+    )
+
+    puts result.data.first.url
+    ```
+  </Tab>
+
+  <Tab title="Audio Transcription">
+    ```ruby
+    require "pathname"
+
+    # Upload and transcribe audio
+    transcription = client.audio.transcriptions.create(
+      file: Pathname("audio.mp3"),
+      model: "whisper-1"
+    )
+
+    puts transcription.text
+    ```
+  </Tab>
+</Tabs>
+
+## Supported File Types
+
+Different endpoints support different file types:
+
+<Accordion title="Fine-tuning Files">
+  - **Format**: JSONL (JSON Lines)
+  - **Purpose**: `"fine-tune"`
+  - **Max size**: Check API documentation for current limits
+</Accordion>
+
+<Accordion title="Image Files">
+  - **Formats**: PNG, JPEG, WEBP
+  - **Models**: Image generation and editing
+  - **Max size**: 4MB per image
+</Accordion>
+
+<Accordion title="Audio Files">
+  - **Formats**: MP3, MP4, MPEG, MPGA, M4A, WAV, WEBM
+  - **Models**: Whisper (transcription/translation)
+  - **Max size**: 25MB
+</Accordion>
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Pathname for files on disk">
+    This provides the best performance and reliability, especially for large files.
+  </Step>
+
+  <Step title="Use FilePart when you need custom metadata">
+    Explicitly set content type and filename when the defaults aren't appropriate.
+  </Step>
+
+  <Step title="Avoid loading large files into memory">
+    Use streaming approaches (`Pathname`, `IO`) rather than `File.read` for large files.
+  </Step>
+
+  <Step title="Validate file formats before upload">
+    Ensure your files match the expected format for the endpoint to avoid API errors.
+  </Step>
+</Steps>
+
+## Error Handling
+
+```ruby
+require "pathname"
+
+begin
+  file_object = client.files.create(
+    file: Pathname("training.jsonl"),
+    purpose: "fine-tune"
+  )
+  puts "Uploaded: #{file_object.id}"
+rescue OpenAI::Errors::APIError => e
+  puts "Upload failed: #{e.message}"
+  puts "Status: #{e.status}" if e.respond_to?(:status)
+rescue Errno::ENOENT
+  puts "File not found"
+rescue StandardError => e
+  puts "Unexpected error: #{e.message}"
+end
+```

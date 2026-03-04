@@ -1,0 +1,187 @@
+---
+title: "Audio Transcription & Translation"
+description: "Transcribe and translate audio files using the OpenAI Ruby SDK"
+---
+
+## Transcribe Audio
+
+Transcribe audio files into the input language using the Whisper model.
+
+```ruby
+require "openai"
+require "pathname"
+
+client = OpenAI::Client.new
+
+response = client.audio.transcriptions.create(
+  file: Pathname("audio.mp3"),
+  model: "gpt-4o-transcribe"
+)
+
+puts response.text
+```
+
+<Note>
+  The `file` parameter accepts a `Pathname`, `StringIO`, `IO`, or raw file contents.
+</Note>
+
+## Transcription with Options
+
+Customize transcription with additional parameters like language, prompt, and response format.
+
+```ruby
+response = client.audio.transcriptions.create(
+  file: Pathname("meeting.mp3"),
+  model: "gpt-4o-transcribe",
+  language: "en",
+  prompt: "This is a meeting about product development",
+  response_format: "verbose_json",
+  temperature: 0.2
+)
+
+# Verbose response includes timestamps and other metadata
+puts "Text: #{response.text}"
+puts "Language: #{response.language}"
+puts "Duration: #{response.duration}"
+```
+
+## Response Formats
+
+The transcription API supports multiple response formats:
+
+<Tabs>
+  <Tab title="JSON (default)">
+    ```ruby
+    response = client.audio.transcriptions.create(
+      file: Pathname("audio.mp3"),
+      model: "gpt-4o-transcribe",
+      response_format: "json"
+    )
+
+    # Returns basic transcription text
+    puts response.text
+    ```
+  </Tab>
+  <Tab title="Verbose JSON">
+    ```ruby
+    response = client.audio.transcriptions.create(
+      file: Pathname("audio.mp3"),
+      model: "gpt-4o-transcribe",
+      response_format: "verbose_json"
+    )
+
+    # Returns detailed information
+    puts response.text
+    puts response.language
+    puts response.duration
+    response.segments.each do |segment|
+      puts "#{segment.start} - #{segment.end}: #{segment.text}"
+    end
+    ```
+  </Tab>
+  <Tab title="Diarized JSON">
+    ```ruby
+    response = client.audio.transcriptions.create(
+      file: Pathname("audio.mp3"),
+      model: "gpt-4o-transcribe",
+      response_format: "diarized_json"
+    )
+
+    # Returns speaker-separated transcription
+    response.segments.each do |segment|
+      puts "Speaker #{segment.speaker}: #{segment.text}"
+    end
+    ```
+  </Tab>
+  <Tab title="Plain Text">
+    ```ruby
+    response = client.audio.transcriptions.create(
+      file: Pathname("audio.mp3"),
+      model: "gpt-4o-transcribe",
+      response_format: "text"
+    )
+
+    # Returns plain text string
+    puts response
+    ```
+  </Tab>
+</Tabs>
+
+## Translate Audio to English
+
+Translate audio files from any supported language into English.
+
+```ruby
+response = client.audio.translations.create(
+  file: Pathname("french_audio.mp3"),
+  model: "whisper-1"
+)
+
+puts response.text  # English translation
+```
+
+## Translation with Prompt
+
+Provide context to guide the translation style or continue from previous audio.
+
+```ruby
+response = client.audio.translations.create(
+  file: Pathname("spanish_interview.mp3"),
+  model: "whisper-1",
+  prompt: "This is an interview with a software engineer discussing AI",
+  response_format: "verbose_json"
+)
+
+puts "Translation: #{response.text}"
+puts "Original language: #{response.language}"
+```
+
+<Note>
+  Translation always converts audio to English, regardless of the source language. Use transcription if you want to keep the original language.
+</Note>
+
+## Supported Audio Formats
+
+The API supports the following audio file formats:
+
+- FLAC
+- MP3
+- MP4
+- MPEG
+- MPGA
+- M4A
+- OGG
+- WAV
+- WEBM
+
+```ruby
+# Any supported format works
+formats = ["audio.flac", "audio.mp3", "audio.wav", "audio.m4a"]
+
+formats.each do |file|
+  response = client.audio.transcriptions.create(
+    file: Pathname(file),
+    model: "gpt-4o-transcribe"
+  )
+  puts "#{file}: #{response.text}"
+end
+```
+
+## Using StringIO
+
+Transcribe audio from memory without writing to disk.
+
+```ruby
+require "stringio"
+
+# Read audio file into memory
+audio_data = File.read("audio.mp3")
+audio_io = StringIO.new(audio_data)
+
+response = client.audio.transcriptions.create(
+  file: audio_io,
+  model: "gpt-4o-transcribe"
+)
+
+puts response.text
+```

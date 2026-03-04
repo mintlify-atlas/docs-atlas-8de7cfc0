@@ -1,0 +1,130 @@
+---
+title: Moderations
+description: Classify text and image inputs for potentially harmful content using OpenAI's moderation API
+---
+
+## Overview
+
+The Moderations API allows you to classify text and image inputs to determine if they contain potentially harmful content across multiple categories including harassment, hate speech, self-harm, sexual content, and violence.
+
+## Create moderation
+
+Classifies if text and/or image inputs are potentially harmful.
+
+```ruby
+response = client.moderations.create(
+  input: "I want to hurt someone",
+  model: "omni-moderation-latest"
+)
+```
+
+### Parameters
+
+<ParamField path="input" type="string | array" required>
+  Input (or inputs) to classify. Can be:
+  - A single string
+  - An array of strings
+  - An array of multimodal inputs (text and images)
+</ParamField>
+
+<ParamField path="model" type="string">
+  The content moderation model to use. Options:
+  - `omni-moderation-latest` (default)
+  - `omni-moderation-2024-09-26`
+  - `text-moderation-latest`
+  - `text-moderation-stable`
+</ParamField>
+
+### Response
+
+Returns a `ModerationCreateResponse` object containing:
+
+<ResponseField name="id" type="string">
+  Unique identifier for the moderation request
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  The model used for moderation
+</ResponseField>
+
+<ResponseField name="results" type="array">
+  Array of moderation results, one for each input
+  
+  <Expandable title="Moderation object">
+    <ResponseField name="flagged" type="boolean">
+      Whether any of the categories are flagged
+    </ResponseField>
+    
+    <ResponseField name="categories" type="object">
+      Boolean flags for each category:
+      - `harassment` - Harassing language
+      - `harassment_threatening` - Harassment with violence
+      - `hate` - Hate speech based on protected attributes
+      - `hate_threatening` - Hateful content with violence
+      - `illicit` - Instructions for wrongdoing
+      - `illicit_violent` - Instructions for violent wrongdoing
+      - `self_harm` - Promotes self-harm
+      - `self_harm_instructions` - Instructions for self-harm
+      - `self_harm_intent` - Intent to self-harm
+      - `sexual` - Sexual content
+      - `sexual_minors` - Sexual content involving minors
+      - `violence` - Depicts violence or injury
+      - `violence_graphic` - Graphic violence
+    </ResponseField>
+    
+    <ResponseField name="category_scores" type="object">
+      Confidence scores (0-1) for each category
+    </ResponseField>
+    
+    <ResponseField name="category_applied_input_types" type="object">
+      Input types each score applies to (text, image)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Text moderation
+
+```ruby
+response = client.moderations.create(
+  input: "This is a sample text to check for harmful content."
+)
+
+if response.results.first.flagged
+  puts "Content flagged for: #{response.results.first.categories.inspect}"
+end
+```
+
+### Multimodal moderation
+
+```ruby
+response = client.moderations.create(
+  input: [
+    { type: "text", text: "Is this image safe?" },
+    { type: "image_url", image_url: { url: "https://example.com/image.jpg" } }
+  ],
+  model: "omni-moderation-latest"
+)
+```
+
+### Batch moderation
+
+```ruby
+response = client.moderations.create(
+  input: [
+    "First text to moderate",
+    "Second text to moderate",
+    "Third text to moderate"
+  ]
+)
+
+response.results.each_with_index do |result, index|
+  puts "Input #{index + 1}: flagged=#{result.flagged}"
+end
+```
+
+## Related
+
+- [Moderation guide](https://platform.openai.com/docs/guides/moderation)
+- [Safety best practices](https://platform.openai.com/docs/guides/safety-best-practices)

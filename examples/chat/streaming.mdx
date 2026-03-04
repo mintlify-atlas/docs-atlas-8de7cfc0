@@ -1,0 +1,211 @@
+---
+title: 'Streaming Chat Responses'
+description: 'Learn how to stream chat completion responses in real-time with the OpenAI Ruby SDK'
+---
+
+## Overview
+
+Streaming allows you to receive chat completion responses incrementally as they're generated, rather than waiting for the entire response. This is essential for building responsive user interfaces and real-time applications.
+
+## Basic Streaming
+
+The simplest way to stream chat completions is using the `stream` method with event handling:
+
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../../lib/openai"
+
+# gets API Key from environment variable `OPENAI_API_KEY`
+client = OpenAI::Client.new
+
+stream = client.chat.completions.stream(
+  model: "gpt-4o-mini",
+  messages: [
+    {role: :user, content: "Write a creative haiku about the ocean."}
+  ]
+)
+
+stream.each do |event|
+  case event
+  when OpenAI::Streaming::ChatContentDeltaEvent
+    print(event.delta)
+  when OpenAI::Streaming::ChatContentDoneEvent
+    puts
+  end
+end
+```
+
+## Streaming Methods
+
+<Tabs>
+  <Tab title="Event-based Streaming">
+    The event-based approach gives you fine-grained control over different event types:
+
+    ```ruby
+    stream = client.chat.completions.stream(
+      model: "gpt-4o-mini",
+      messages: [
+        {role: :user, content: "Write a creative haiku about the ocean."}
+      ]
+    )
+
+    stream.each do |event|
+      case event
+      when OpenAI::Streaming::ChatContentDeltaEvent
+        print(event.delta)
+      when OpenAI::Streaming::ChatContentDoneEvent
+        puts
+      end
+    end
+    ```
+  </Tab>
+  
+  <Tab title="Text-only Streaming">
+    For simpler use cases, use the `text` helper to stream only the text content:
+
+    ```ruby
+    stream = client.chat.completions.stream(
+      model: "gpt-4o-mini",
+      messages: [
+        {role: :user, content: "List three fun facts about dolphins."}
+      ]
+    )
+
+    stream.text.each do |text|
+      print(text)
+    end
+    puts
+    ```
+  </Tab>
+  
+  <Tab title="Raw Streaming">
+    For complete control over the stream, use `stream_raw` to access raw chunk data:
+
+    ```ruby
+    stream = client.chat.completions.stream_raw(
+      model: "gpt-4",
+      messages: [
+        {
+          role: "user",
+          content: "How do I output all files in a directory using Python?"
+        }
+      ]
+    )
+
+    stream.each do |chunk|
+      next if chunk.choices.to_a.empty?
+
+      pp(chunk.choices.first&.delta&.content)
+    end
+    ```
+  </Tab>
+</Tabs>
+
+## Key Concepts
+
+### Stream Events
+
+When using event-based streaming, you'll encounter different event types:
+
+- **`ChatContentDeltaEvent`** - Contains incremental content as it's generated
+- **`ChatContentDoneEvent`** - Signals that content generation is complete
+- **`ChatFunctionToolCallArgumentsDeltaEvent`** - Contains incremental tool call arguments
+- **`ChatFunctionToolCallArgumentsDoneEvent`** - Signals tool call arguments are complete
+
+### Stream Cleanup
+
+<Note>
+  Streams are automatically cleaned up when you iterate through them with `each`. If you don't consume the stream, make sure to call `stream.close` manually to free resources.
+</Note>
+
+## Advanced Example: Streaming with Structured Outputs
+
+You can combine streaming with structured outputs to get real-time updates while ensuring type-safe responses:
+
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../../lib/openai"
+
+class Step < OpenAI::BaseModel
+  required :explanation, String
+  required :output, String
+end
+
+class MathResponse < OpenAI::BaseModel
+  required :steps, OpenAI::ArrayOf[Step]
+  required :final_answer, String
+end
+
+client = OpenAI::Client.new
+
+stream = client.chat.completions.stream(
+  model: "gpt-4o-mini",
+  response_format: MathResponse,
+  messages: [
+    {role: :user, content: "solve 8x + 31 = 2, show all steps"}
+  ]
+)
+
+stream.each do |event|
+  case event
+  when OpenAI::Streaming::ChatContentDeltaEvent
+    print(event.delta)
+  when OpenAI::Streaming::ChatContentDoneEvent
+    puts
+    puts("--- parsed object ---")
+    pp(event.parsed)
+  end
+end
+
+response = stream.get_final_completion
+
+puts
+puts("----- parsed outputs from final response -----")
+response
+  .choices
+  .each do |choice|
+    # parsed is an instance of `MathResponse`
+    pp(choice.message.parsed)
+  end
+```
+
+### Getting the Final Response
+
+After streaming completes, you can access the full completion object:
+
+```ruby
+response = stream.get_final_completion
+```
+
+This is useful when you need to access metadata or the complete parsed response after streaming.
+
+## Best Practices
+
+<Steps>
+  <Step title="Use the text helper for simple cases">
+    If you only need the text content, use `stream.text.each` for cleaner code.
+  </Step>
+  
+  <Step title="Handle events appropriately">
+    Match on specific event types to handle different streaming scenarios like tool calls or structured outputs.
+  </Step>
+  
+  <Step title="Always consume or close streams">
+    Either iterate through the entire stream or call `stream.close` to prevent resource leaks.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Structured Outputs" href="/examples/chat/structured-outputs">
+    Learn how to get type-safe, structured responses from chat completions
+  </Card>
+  <Card title="Function Calling" href="/examples/chat/tools">
+    Stream tool calls and function arguments in real-time
+  </Card>
+</CardGroup>

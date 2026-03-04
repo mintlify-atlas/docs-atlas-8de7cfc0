@@ -1,0 +1,204 @@
+---
+title: "Client Initialization"
+description: "Learn how to instantiate and initialize the OpenAI Ruby client with various configuration parameters."
+---
+
+## Overview
+
+The `OpenAI::Client` class is the primary entry point for interacting with the OpenAI API. It handles authentication, request configuration, and provides access to all API resources.
+
+## Basic Usage
+
+<CodeGroup>
+```ruby Basic
+client = OpenAI::Client.new(
+  api_key: "your-api-key"
+)
+```
+
+```ruby With Organization
+client = OpenAI::Client.new(
+  api_key: "your-api-key",
+  organization: "org-123"
+)
+```
+
+```ruby Full Configuration
+client = OpenAI::Client.new(
+  api_key: "your-api-key",
+  organization: "org-123",
+  project: "proj-456",
+  webhook_secret: "whsec_789",
+  base_url: "https://api.openai.com/v1",
+  max_retries: 3,
+  timeout: 600.0,
+  initial_retry_delay: 0.5,
+  max_retry_delay: 8.0
+)
+```
+</CodeGroup>
+
+## Parameters
+
+<ParamField path="api_key" type="String" required>
+  Your OpenAI API key. This parameter is required.
+  
+  **Default:** `ENV["OPENAI_API_KEY"]`
+  
+  <Note>
+    If not provided and the environment variable is not set, an `ArgumentError` will be raised.
+  </Note>
+</ParamField>
+
+<ParamField path="organization" type="String" optional>
+  Your OpenAI organization ID. Used for scoping API requests to a specific organization.
+  
+  **Default:** `ENV["OPENAI_ORG_ID"]`
+  
+  This value is sent in the `openai-organization` header with each request.
+</ParamField>
+
+<ParamField path="project" type="String" optional>
+  Your OpenAI project ID. Used for scoping API requests to a specific project.
+  
+  **Default:** `ENV["OPENAI_PROJECT_ID"]`
+  
+  This value is sent in the `openai-project` header with each request.
+</ParamField>
+
+<ParamField path="webhook_secret" type="String" optional>
+  Your webhook secret for verifying webhook signatures.
+  
+  **Default:** `ENV["OPENAI_WEBHOOK_SECRET"]`
+</ParamField>
+
+<ParamField path="base_url" type="String" optional>
+  Override the default base URL for the API. Useful for testing or using alternative endpoints.
+  
+  **Default:** `ENV["OPENAI_BASE_URL"]` or `"https://api.openai.com/v1"`
+  
+  <Info>
+    Example: `"https://api.example.com/v2/"`
+  </Info>
+</ParamField>
+
+<ParamField path="max_retries" type="Integer" optional>
+  Maximum number of retries to attempt after a failed retryable request.
+  
+  **Default:** `2` (`OpenAI::Client::DEFAULT_MAX_RETRIES`)
+</ParamField>
+
+<ParamField path="timeout" type="Float" optional>
+  Per-request timeout in seconds.
+  
+  **Default:** `600.0` (`OpenAI::Client::DEFAULT_TIMEOUT_IN_SECONDS`)
+</ParamField>
+
+<ParamField path="initial_retry_delay" type="Float" optional>
+  Initial retry delay in seconds. Overall delay is calculated using exponential backoff plus jitter.
+  
+  **Default:** `0.5` (`OpenAI::Client::DEFAULT_INITIAL_RETRY_DELAY`)
+</ParamField>
+
+<ParamField path="max_retry_delay" type="Float" optional>
+  Maximum retry delay in seconds.
+  
+  **Default:** `8.0` (`OpenAI::Client::DEFAULT_MAX_RETRY_DELAY`)
+</ParamField>
+
+## Constants
+
+The `OpenAI::Client` class defines the following constants for default configuration values:
+
+<CodeGroup>
+```ruby Default Values
+OpenAI::Client::DEFAULT_MAX_RETRIES # => 2
+OpenAI::Client::DEFAULT_TIMEOUT_IN_SECONDS # => 600.0
+OpenAI::Client::DEFAULT_INITIAL_RETRY_DELAY # => 0.5
+OpenAI::Client::DEFAULT_MAX_RETRY_DELAY # => 8.0
+```
+</CodeGroup>
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `DEFAULT_MAX_RETRIES` | `2` | Default max number of retries to attempt after a failed retryable request |
+| `DEFAULT_TIMEOUT_IN_SECONDS` | `600.0` | Default per-request timeout |
+| `DEFAULT_INITIAL_RETRY_DELAY` | `0.5` | Default initial retry delay in seconds (used with exponential backoff + jitter) |
+| `DEFAULT_MAX_RETRY_DELAY` | `8.0` | Default max retry delay in seconds |
+
+## Available Resources
+
+Once initialized, the client provides access to the following resource namespaces:
+
+<CodeGroup>
+```ruby Resources
+client.completions      # Text completions
+client.chat             # Chat completions
+client.embeddings       # Embeddings
+client.files            # File management
+client.images           # Image generation
+client.audio            # Audio transcription and generation
+client.moderations      # Content moderation
+client.models           # Model information
+client.fine_tuning      # Fine-tuning jobs
+client.graders          # Graders
+client.vector_stores    # Vector stores
+client.webhooks         # Webhook management
+client.beta             # Beta features (assistants, threads)
+client.batches          # Batch API
+client.uploads          # File uploads
+client.responses        # Responses
+client.realtime         # Realtime API
+client.conversations    # Conversations
+client.evals            # Evaluations
+client.containers       # Containers
+client.skills           # Skills
+client.videos           # Video generation
+```
+</CodeGroup>
+
+## Error Handling
+
+<Note>
+  If the `api_key` is not provided (either as a parameter or via the `OPENAI_API_KEY` environment variable), an `ArgumentError` will be raised:
+  
+  ```ruby
+  ArgumentError: api_key is required, and can be set via environ: "OPENAI_API_KEY"
+  ```
+</Note>
+
+## Examples
+
+<CodeGroup>
+```ruby Environment Variables
+# Set environment variables
+ENV["OPENAI_API_KEY"] = "sk-..."
+ENV["OPENAI_ORG_ID"] = "org-..."
+
+# Client will use environment variables automatically
+client = OpenAI::Client.new
+```
+
+```ruby Custom Retry Configuration
+client = OpenAI::Client.new(
+  api_key: "sk-...",
+  max_retries: 5,
+  initial_retry_delay: 1.0,
+  max_retry_delay: 16.0
+)
+```
+
+```ruby Custom Timeout
+client = OpenAI::Client.new(
+  api_key: "sk-...",
+  timeout: 120.0  # 2 minutes
+)
+```
+
+```ruby Custom Base URL
+client = OpenAI::Client.new(
+  api_key: "sk-...",
+  base_url: "https://your-proxy.example.com/v1"
+)
+```
+</CodeGroup>

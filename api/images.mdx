@@ -1,0 +1,334 @@
+---
+title: Images
+description: Generate, edit, and create variations of images using DALL-E models
+---
+
+The Images API provides three methods for interacting with images: generating new images from text prompts, editing existing images, and creating variations of images.
+
+## Generate images
+
+Creates an image given a text prompt.
+
+```ruby
+client.images.generate(params)
+```
+
+<ParamField path="prompt" type="String" required>
+  A text description of the desired image(s). Maximum length is 32000 characters for GPT image models, 1000 for DALL-E.
+</ParamField>
+
+<ParamField path="model" type="String" default="gpt-image-1.5">
+  The model to use for image generation. Options: `dall-e-2`, `dall-e-3`, `gpt-image-1.5`, `gpt-image-1`, `gpt-image-1-mini`, `chatgpt-image-latest`.
+</ParamField>
+
+<ParamField path="n" type="Integer" default="1">
+  The number of images to generate. Must be between 1 and 10. For `dall-e-3`, only `n=1` is supported.
+</ParamField>
+
+<ParamField path="size" type="String" default="1024x1024">
+  The size of the generated images. Options include `1024x1024`, `1536x1024` (landscape), `1024x1536` (portrait), `256x256`, `512x512`.
+</ParamField>
+
+<ParamField path="quality" type="String" default="standard">
+  The quality of the image. Options: `standard` or `hd`. HD quality is available for `dall-e-3` and GPT image models.
+</ParamField>
+
+<ParamField path="style" type="String">
+  The style of the generated images. Options: `vivid` or `natural`. Only supported for `dall-e-3`.
+</ParamField>
+
+<ParamField path="response_format" type="String" default="url">
+  The format in which images are returned. Options: `url` or `b64_json`.
+</ParamField>
+
+<ParamField path="background" type="String">
+  Set transparency for the background. Options: `opaque` or `transparent`.
+</ParamField>
+
+<ParamField path="output_format" type="String">
+  The format for generated images. Supported for GPT image models. Options include `png`, `jpeg`, `webp`.
+</ParamField>
+
+<ParamField path="output_compression" type="Integer">
+  The compression level (0-100%) for the generated images. Only for GPT image models.
+</ParamField>
+
+<ParamField path="moderation" type="String">
+  Control the content-moderation level. Options: `off`, `low`, `medium`, `high`. Only for GPT image models.
+</ParamField>
+
+<ParamField path="user" type="String">
+  A unique identifier representing your end-user.
+</ParamField>
+
+### Response
+
+Returns an `ImagesResponse` object.
+
+<ResponseField name="created" type="Integer">
+  Unix timestamp of when the image was created.
+</ResponseField>
+
+<ResponseField name="data" type="Array">
+  List of generated image objects.
+  
+  <Expandable title="Image object properties">
+    <ResponseField name="url" type="String">
+      The URL where the image can be accessed (when response_format is `url`).
+    </ResponseField>
+    
+    <ResponseField name="b64_json" type="String">
+      The base64-encoded JSON of the image (when response_format is `b64_json`).
+    </ResponseField>
+    
+    <ResponseField name="revised_prompt" type="String">
+      The prompt that was used to generate the image, if there was any revision.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Examples
+
+#### Basic image generation
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+response = client.images.generate(
+  prompt: "An astronaut lounging in a tropical resort in space, pixel art"
+)
+
+puts response.data.first.url
+```
+
+#### HD quality with specific size
+
+```ruby
+response = client.images.generate(
+  prompt: "A serene mountain landscape at sunset",
+  model: "dall-e-3",
+  size: "1536x1024",
+  quality: "hd",
+  style: "natural"
+)
+
+image_url = response.data.first.url
+puts "Generated image: #{image_url}"
+puts "Revised prompt: #{response.data.first.revised_prompt}"
+```
+
+#### Multiple images
+
+```ruby
+response = client.images.generate(
+  prompt: "A cute cat playing with yarn",
+  model: "dall-e-2",
+  n: 3,
+  size: "512x512"
+)
+
+response.data.each_with_index do |image, i|
+  puts "Image #{i + 1}: #{image.url}"
+end
+```
+
+#### Streaming image generation
+
+```ruby
+stream = client.images.generate_stream_raw(
+  prompt: "A futuristic cityscape",
+  model: "gpt-image-1.5",
+  partial_images: 3
+)
+
+stream.each do |event|
+  case event
+  when OpenAI::Models::ImageGenPartialImageEvent
+    puts "Partial image #{event.index} received"
+  when OpenAI::Models::ImageGenCompletedEvent
+    puts "Final image: #{event.data.first.url}"
+  end
+end
+```
+
+## Edit images
+
+Creates an edited or extended image given one or more source images and a prompt.
+
+```ruby
+client.images.edit(params)
+```
+
+<ParamField path="image" type="File | Array<File>" required>
+  The image(s) to edit. Must be a valid PNG file, less than 4MB, and square.
+</ParamField>
+
+<ParamField path="prompt" type="String" required>
+  A text description of the desired image(s). Maximum length is 1000 characters.
+</ParamField>
+
+<ParamField path="mask" type="File">
+  An additional image whose fully transparent areas indicate where to edit. Must be a valid PNG file.
+</ParamField>
+
+<ParamField path="model" type="String" default="gpt-image-1.5">
+  The model to use. Supports GPT image models and `dall-e-2`.
+</ParamField>
+
+<ParamField path="n" type="Integer" default="1">
+  The number of images to generate. Must be between 1 and 10.
+</ParamField>
+
+<ParamField path="size" type="String">
+  The size of the generated images. Same options as generate.
+</ParamField>
+
+<ParamField path="response_format" type="String" default="url">
+  The format in which images are returned: `url` or `b64_json`.
+</ParamField>
+
+<ParamField path="quality" type="String">
+  The quality of the image. Options: `standard` or `hd`.
+</ParamField>
+
+<ParamField path="input_fidelity" type="String">
+  Control how much effort the model exerts to match the style and features. Options: `auto`, `low`, `medium`, `high`.
+</ParamField>
+
+### Examples
+
+#### Edit an image
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+response = client.images.edit(
+  image: File.open("original.png"),
+  prompt: "Add a red hat to the person in the image"
+)
+
+puts response.data.first.url
+```
+
+#### Edit with mask
+
+```ruby
+response = client.images.edit(
+  image: File.open("photo.png"),
+  mask: File.open("mask.png"),
+  prompt: "Replace the masked area with a sunny sky",
+  model: "dall-e-2"
+)
+
+puts response.data.first.url
+```
+
+#### Streaming edit
+
+```ruby
+stream = client.images.edit_stream_raw(
+  image: File.open("input.png"),
+  prompt: "Make it look futuristic",
+  model: "gpt-image-1.5",
+  partial_images: 2
+)
+
+stream.each do |event|
+  case event
+  when OpenAI::Models::ImageEditPartialImageEvent
+    puts "Partial result available"
+  when OpenAI::Models::ImageEditCompletedEvent
+    puts "Edit complete: #{event.data.first.url}"
+  end
+end
+```
+
+## Create image variations
+
+Creates a variation of a given image. Only supports `dall-e-2`.
+
+```ruby
+client.images.create_variation(params)
+```
+
+<ParamField path="image" type="File" required>
+  The image to use as the basis for the variation(s). Must be a valid PNG file, less than 4MB, and square.
+</ParamField>
+
+<ParamField path="model" type="String">
+  The model to use. Only `dall-e-2` is supported at this time.
+</ParamField>
+
+<ParamField path="n" type="Integer" default="1">
+  The number of images to generate. Must be between 1 and 10.
+</ParamField>
+
+<ParamField path="size" type="String">
+  The size of the generated images. Options: `256x256`, `512x512`, or `1024x1024`.
+</ParamField>
+
+<ParamField path="response_format" type="String" default="url">
+  The format in which images are returned: `url` or `b64_json`.
+</ParamField>
+
+### Examples
+
+#### Create variations
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+response = client.images.create_variation(
+  image: File.open("original.png"),
+  n: 3,
+  size: "512x512"
+)
+
+response.data.each_with_index do |image, i|
+  puts "Variation #{i + 1}: #{image.url}"
+end
+```
+
+## Download and save images
+
+```ruby
+require "openai"
+require "open-uri"
+
+client = OpenAI::Client.new
+
+response = client.images.generate(
+  prompt: "A beautiful sunset over the ocean"
+)
+
+image_url = response.data.first.url
+
+# Download and save
+URI.open(image_url) do |image|
+  File.open("sunset.png", "wb") do |file|
+    file.write(image.read)
+  end
+end
+
+puts "Image saved to sunset.png"
+```
+
+## Best practices
+
+- **Be specific**: More detailed prompts generally produce better results
+- **Choose the right model**: Use `dall-e-3` or GPT image models for highest quality
+- **Image format**: For edits and variations, ensure images are PNG format and square
+- **File size**: Keep images under 4MB for best performance
+- **Experiment with parameters**: Try different quality, style, and size settings
+- **Use streaming**: For real-time feedback with GPT image models
+
+## Related
+
+- [Image generation guide](https://platform.openai.com/docs/guides/images)
+- [DALL-E models](https://platform.openai.com/docs/models/dall-e)

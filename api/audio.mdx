@@ -1,0 +1,311 @@
+---
+title: Audio
+description: Convert text to speech, transcribe audio to text, and translate audio to English
+---
+
+The Audio API provides three main capabilities: generating speech from text, transcribing audio to text, and translating audio to English.
+
+## Speech (Text-to-Speech)
+
+Generates audio from the input text.
+
+```ruby
+client.audio.speech.create(params)
+```
+
+<ParamField path="input" type="String" required>
+  The text to generate audio for. Maximum length is 4096 characters.
+</ParamField>
+
+<ParamField path="model" type="String" required>
+  One of the available TTS models: `tts-1` or `tts-1-hd`. The `tts-1-hd` model provides higher quality audio.
+</ParamField>
+
+<ParamField path="voice" type="String" required>
+  The voice to use when generating the audio. Supported voices are: `alloy`, `echo`, `fable`, `onyx`, `nova`, and `shimmer`.
+</ParamField>
+
+<ParamField path="response_format" type="String" default="mp3">
+  The format to audio in. Supported formats: `mp3`, `opus`, `aac`, `flac`, `wav`, and `pcm`.
+</ParamField>
+
+<ParamField path="speed" type="Float" default="1.0">
+  The speed of the generated audio. Select a value from `0.25` to `4.0`.
+</ParamField>
+
+<ParamField path="instructions" type="String">
+  Control the voice of your generated audio with additional instructions. Does not work with `tts-1`.
+</ParamField>
+
+<ParamField path="stream_format" type="String">
+  The format to stream the audio in. Supported formats are `sse` and `audio`.
+</ParamField>
+
+### Response
+
+Returns a `StringIO` object containing the audio file content.
+
+### Examples
+
+#### Generate speech
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+audio = client.audio.speech.create(
+  model: "tts-1",
+  voice: "alloy",
+  input: "Hello! Welcome to the OpenAI Ruby SDK."
+)
+
+File.binwrite("output.mp3", audio.read)
+```
+
+#### Different voice and format
+
+```ruby
+audio = client.audio.speech.create(
+  model: "tts-1-hd",
+  voice: "nova",
+  input: "This is a high quality audio sample.",
+  response_format: "wav",
+  speed: 1.2
+)
+
+File.binwrite("output.wav", audio.read)
+```
+
+## Transcriptions (Speech-to-Text)
+
+Transcribes audio into the input language.
+
+```ruby
+client.audio.transcriptions.create(params)
+```
+
+<ParamField path="file" type="File" required>
+  The audio file to transcribe. Supported formats: `flac`, `mp3`, `mp4`, `mpeg`, `mpga`, `m4a`, `ogg`, `wav`, or `webm`.
+</ParamField>
+
+<ParamField path="model" type="String" required>
+  ID of the model to use. Options include `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`, `whisper-1`.
+</ParamField>
+
+<ParamField path="language" type="String">
+  The language of the input audio in ISO-639-1 format (e.g., `en`, `es`, `fr`). Supplying the input language improves accuracy and latency.
+</ParamField>
+
+<ParamField path="prompt" type="String">
+  An optional text to guide the model's style or continue a previous audio segment. The prompt should match the audio language.
+</ParamField>
+
+<ParamField path="response_format" type="String" default="json">
+  The format of the output: `json`, `text`, `srt`, `verbose_json`, `vtt`, or `diarized_json`.
+</ParamField>
+
+<ParamField path="temperature" type="Float" default="0">
+  The sampling temperature, between 0 and 1. Higher values make output more random.
+</ParamField>
+
+<ParamField path="timestamp_granularities" type="Array<String>">
+  The timestamp granularities to populate for this transcription. Options: `word`, `segment`.
+</ParamField>
+
+<ParamField path="chunking_strategy" type="String | Object">
+  Controls how the audio is cut into chunks. Can be `auto` or a VAD configuration object.
+</ParamField>
+
+<ParamField path="known_speaker_names" type="Array<String>">
+  Optional list of speaker names that correspond to audio samples for speaker identification.
+</ParamField>
+
+### Response
+
+Returns a `Transcription`, `TranscriptionDiarized`, or `TranscriptionVerbose` object depending on `response_format`.
+
+<ResponseField name="text" type="String">
+  The transcribed text.
+</ResponseField>
+
+<ResponseField name="language" type="String">
+  The detected language (verbose_json only).
+</ResponseField>
+
+<ResponseField name="duration" type="Float">
+  The duration of the audio in seconds (verbose_json only).
+</ResponseField>
+
+<ResponseField name="words" type="Array">
+  Word-level timestamps (when timestamp_granularities includes `word`).
+</ResponseField>
+
+<ResponseField name="segments" type="Array">
+  Segment-level timestamps (when timestamp_granularities includes `segment`).
+</ResponseField>
+
+### Examples
+
+#### Basic transcription
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+transcription = client.audio.transcriptions.create(
+  file: File.open("audio.mp3"),
+  model: "whisper-1"
+)
+
+puts transcription.text
+```
+
+#### With language specification
+
+```ruby
+transcription = client.audio.transcriptions.create(
+  file: File.open("spanish_audio.mp3"),
+  model: "whisper-1",
+  language: "es",
+  response_format: "verbose_json"
+)
+
+puts "Detected language: #{transcription.language}"
+puts "Duration: #{transcription.duration} seconds"
+puts "Text: #{transcription.text}"
+```
+
+#### Streaming transcription
+
+```ruby
+stream = client.audio.transcriptions.create_streaming(
+  file: File.open("audio.mp3"),
+  model: "whisper-1"
+)
+
+stream.each do |event|
+  case event
+  when OpenAI::Models::Audio::TranscriptionTextDeltaEvent
+    print event.delta
+  when OpenAI::Models::Audio::TranscriptionTextDoneEvent
+    puts "\nTranscription complete!"
+  end
+end
+```
+
+#### With timestamps
+
+```ruby
+transcription = client.audio.transcriptions.create(
+  file: File.open("audio.mp3"),
+  model: "whisper-1",
+  response_format: "verbose_json",
+  timestamp_granularities: [:word, :segment]
+)
+
+transcription.words.each do |word|
+  puts "#{word[:word]} (#{word[:start]}s - #{word[:end]}s)"
+end
+```
+
+## Translations (Audio to English)
+
+Translates audio into English.
+
+```ruby
+client.audio.translations.create(params)
+```
+
+<ParamField path="file" type="File" required>
+  The audio file to translate. Supported formats: `flac`, `mp3`, `mp4`, `mpeg`, `mpga`, `m4a`, `ogg`, `wav`, or `webm`.
+</ParamField>
+
+<ParamField path="model" type="String" required>
+  ID of the model to use. Only `whisper-1` is currently supported.
+</ParamField>
+
+<ParamField path="prompt" type="String">
+  An optional text to guide the model's style or continue a previous audio segment.
+</ParamField>
+
+<ParamField path="response_format" type="String" default="json">
+  The format of the output: `json`, `text`, `srt`, `verbose_json`, or `vtt`.
+</ParamField>
+
+<ParamField path="temperature" type="Float" default="0">
+  The sampling temperature, between 0 and 1.
+</ParamField>
+
+### Response
+
+Returns a `Translation` or `TranslationVerbose` object.
+
+<ResponseField name="text" type="String">
+  The translated text in English.
+</ResponseField>
+
+### Examples
+
+#### Basic translation
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+translation = client.audio.translations.create(
+  file: File.open("german_audio.mp3"),
+  model: "whisper-1"
+)
+
+puts translation.text
+```
+
+#### With prompt guidance
+
+```ruby
+translation = client.audio.translations.create(
+  file: File.open("french_audio.mp3"),
+  model: "whisper-1",
+  prompt: "This is a technical discussion about machine learning.",
+  response_format: "verbose_json"
+)
+
+puts "English translation: #{translation.text}"
+```
+
+## Audio formats
+
+Supported input formats for transcription and translation:
+- FLAC
+- MP3
+- MP4
+- MPEG
+- MPGA
+- M4A
+- OGG
+- WAV
+- WEBM
+
+Supported output formats for speech generation:
+- MP3 (default)
+- Opus
+- AAC
+- FLAC
+- WAV
+- PCM
+
+## Best practices
+
+- **Choose the right voice**: Preview all available voices to find the best match for your use case
+- **Specify language**: For transcription, providing the language code improves accuracy and speed
+- **Use prompts**: Guide the model with prompts for better transcription of technical terms or specific styles
+- **Streaming**: Use streaming methods for real-time applications
+- **File size**: Keep audio files under 25 MB for best performance
+
+## Related
+
+- [Audio guide](https://platform.openai.com/docs/guides/audio)
+- [Speech-to-text guide](https://platform.openai.com/docs/guides/speech-to-text)

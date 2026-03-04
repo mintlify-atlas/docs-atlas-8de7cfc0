@@ -1,0 +1,157 @@
+---
+title: Streaming
+description: Stream chat completions and responses using Server-Sent Events (SSE)
+---
+
+The OpenAI Ruby SDK provides support for streaming responses using Server-Sent Events (SSE). This allows you to receive and process responses incrementally as they're generated, rather than waiting for the complete response.
+
+## Basic Streaming
+
+Use the `create_streaming` method to create a streaming request:
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+stream = client.completions.create_streaming(
+  model: :"gpt-3.5-turbo-instruct",
+  prompt: "1,2,3,",
+  max_tokens: 5,
+  temperature: 0.0
+)
+
+stream.each do |data|
+  pp(data)
+end
+```
+
+<Note>
+Calling `#each` on a stream will automatically clean up the connection, even if an error is thrown inside the block.
+</Note>
+
+## Early Exit from Stream
+
+You can exit the stream loop early, and the connection will be properly cleaned up:
+
+```ruby
+stream = client.completions.create_streaming(
+  model: :"gpt-3.5-turbo-instruct",
+  prompt: "1,2,3,",
+  max_tokens: 5,
+  temperature: 0.0
+)
+
+stream.each do |data|
+  pp(data)
+
+  # Exit early if needed - stream will be cleaned up automatically
+  if data.choices.size > 2
+    pp("too many choices")
+    break
+  end
+end
+```
+
+## Manual Stream Management
+
+If you don't consume the stream via `#each`, you must manually close it to release the connection:
+
+```ruby
+stream = client.completions.create_streaming(
+  model: :"gpt-3.5-turbo-instruct",
+  prompt: "1,2,3,",
+  max_tokens: 5,
+  temperature: 0.0
+)
+
+# If stream is not consumed, manually close it
+stream.close
+```
+
+<Warning>
+Once a stream has been exhausted or closed, no more chunks will be produced. Calling `#each` on an exhausted stream will not produce any output.
+</Warning>
+
+## Stream as Enumerable
+
+Streams implement the `Enumerable` interface, allowing you to use standard Ruby methods:
+
+```ruby
+stream = client.completions.create_streaming(
+  model: :"gpt-3.5-turbo-instruct",
+  prompt: "1,2,3,",
+  max_tokens: 5,
+  temperature: 0.0
+)
+
+# Use Enumerable methods - this blocks until the stream is consumed
+all_choices = stream
+  .select { |completion| completion.object == :text_completion }
+  .flat_map { |completion| completion.choices }
+
+pp(all_choices)
+```
+
+<Note>
+Calling any Enumerable method will block until the entire stream is consumed and will automatically clean up the connection.
+</Note>
+
+## Lazy Stream Processing
+
+For more efficient processing, use lazy evaluation to avoid blocking:
+
+```ruby
+stream = client.completions.create_streaming(
+  model: :"gpt-3.5-turbo-instruct",
+  prompt: "1,2,3,",
+  max_tokens: 5,
+  temperature: 0.0
+)
+
+# Create a lazy enumerator - does not consume the stream yet
+stream_of_choices = stream
+  .lazy
+  .select { |completion| completion.object == :text_completion }
+  .flat_map { |completion| completion.choices }
+
+# Stream is only consumed when you call a terminal operation
+stream_of_choices.each do |choice|
+  pp(choice)
+end
+```
+
+<Warning>
+If you create a lazy intermediary stream but don't consume it, you must call `stream.close` to release the underlying connection.
+</Warning>
+
+## Streaming with Responses API
+
+You can also stream responses using the Responses API:
+
+```ruby
+stream = client.responses.stream(
+  input: "Write a haiku about OpenAI.",
+  model: "gpt-5.2"
+)
+
+stream.each do |event|
+  puts(event.type)
+end
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Always consume or close streams">
+    Either iterate through the stream with `#each` or explicitly call `#close` to prevent connection leaks.
+  </Step>
+  
+  <Step title="Use lazy evaluation for large streams">
+    When processing large streams with transformations, use `.lazy` to avoid loading everything into memory.
+  </Step>
+  
+  <Step title="Handle errors gracefully">
+    The stream will be cleaned up automatically even if an error occurs during iteration.
+  </Step>
+</Steps>

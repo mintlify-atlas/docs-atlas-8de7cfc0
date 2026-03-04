@@ -1,0 +1,151 @@
+---
+title: Installation
+description: Install the OpenAI Ruby gem using Bundler or directly with gem install
+---
+
+The OpenAI Ruby library can be installed using Bundler (recommended) or directly via RubyGems.
+
+## Requirements
+
+Before installing, ensure you have:
+
+- Ruby 3.2.0 or higher
+- RubyGems (comes with Ruby)
+- Bundler (recommended for application development)
+
+## Installation Methods
+
+<CodeGroup>
+
+```ruby Gemfile (Bundler)
+# Add to your application's Gemfile
+gem "openai", "~> 0.51.0"
+```
+
+```bash Terminal (gem install)
+gem install openai
+```
+
+</CodeGroup>
+
+<Steps>
+
+<Step title="Add the gem to your project">
+
+### Using Bundler (Recommended)
+
+Add the following line to your application's `Gemfile`:
+
+```ruby
+gem "openai", "~> 0.51.0"
+```
+
+Then run:
+
+```bash
+bundle install
+```
+
+### Using gem install
+
+Alternatively, install the gem directly:
+
+```bash
+gem install openai
+```
+
+</Step>
+
+<Step title="Set up your API key">
+
+The OpenAI client requires an API key to authenticate requests. You can obtain your API key from the [OpenAI Platform](https://platform.openai.com/api-keys).
+
+Set your API key as an environment variable:
+
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+<Note>
+The client will automatically read the API key from the `OPENAI_API_KEY` environment variable by default.
+</Note>
+
+For production applications, consider using a secure secrets management solution or environment configuration tool.
+
+</Step>
+
+<Step title="Require the library">
+
+In your Ruby code, require the library:
+
+```ruby
+require "bundler/setup"
+require "openai"
+```
+
+<Info>
+If you installed the gem directly (not using Bundler), you can simply use `require "openai"`.
+</Info>
+
+</Step>
+
+<Step title="Verify installation">
+
+Create a simple test script to verify the installation:
+
+```ruby
+require "bundler/setup"
+require "openai"
+
+client = OpenAI::Client.new
+puts "OpenAI client initialized successfully!"
+```
+
+If this runs without errors, you're ready to start making API calls.
+
+</Step>
+
+</Steps>
+
+## Optional Configuration
+
+The OpenAI client supports several optional configuration parameters:
+
+### Organization and Project IDs
+
+If you belong to multiple organizations or projects, you can specify which one to use:
+
+```ruby
+client = OpenAI::Client.new(
+  api_key: ENV["OPENAI_API_KEY"],
+  organization: ENV["OPENAI_ORG_ID"],
+  project: ENV["OPENAI_PROJECT_ID"]
+)
+```
+
+### Custom Base URL
+
+Override the default base URL (useful for Azure OpenAI or proxies):
+
+```ruby
+client = OpenAI::Client.new(
+  base_url: "https://api.example.com/v1/"
+)
+```
+
+### Retries and Timeouts
+
+Configure retry behavior and request timeouts:
+
+```ruby
+client = OpenAI::Client.new(
+  max_retries: 2,        # Default: 2
+  timeout: 600,          # Default: 600 seconds
+  initial_retry_delay: 0.5,  # Default: 0.5 seconds
+  max_retry_delay: 8.0   # Default: 8.0 seconds
+)
+```
+
+## Next Steps
+
+Now that you have the OpenAI Ruby gem installed, head over to the [Quick Start](/quickstart) guide to make your first API call.

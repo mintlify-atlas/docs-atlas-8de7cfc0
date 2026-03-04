@@ -1,0 +1,390 @@
+---
+title: Responses
+description: Generate model responses with support for streaming, tools, and structured outputs
+---
+
+## Overview
+
+The Responses API is the primary interface for generating model outputs. It supports text and image inputs, structured outputs, function calling, built-in tools (web search, file search, code interpreter), and both streaming and non-streaming responses.
+
+## Create response
+
+Creates a model response from text, image, or file inputs.
+
+```ruby
+response = client.responses.create(
+  model: "gpt-4o",
+  input: "What is the capital of France?"
+)
+
+puts response.output.first.content.first.text
+```
+
+### Parameters
+
+<ParamField path="model" type="string">
+  Model ID like `gpt-4o`, `gpt-4o-mini`, `o3-mini`, or `o1`. See the [model guide](https://platform.openai.com/docs/models) for available options.
+</ParamField>
+
+<ParamField path="input" type="string | array">
+  Input to the model. Can be:
+  - A simple string
+  - An array of message objects with `role` and `content`
+  - An array of input items (messages, tool calls, reasoning, etc.)
+</ParamField>
+
+<ParamField path="instructions" type="string">
+  System message prepended to the model's context (max 256,000 characters)
+</ParamField>
+
+<ParamField path="temperature" type="float">
+  Sampling temperature between 0 and 2. Higher = more random (default: 1)
+</ParamField>
+
+<ParamField path="max_output_tokens" type="integer">
+  Maximum tokens to generate in the response
+</ParamField>
+
+<ParamField path="tools" type="array">
+  Tools the model can use:
+  
+  <Expandable title="Built-in tools">
+    - `{ type: "file_search" }` - Search uploaded files
+    - `{ type: "code_interpreter" }` - Run Python code
+    - `{ type: "web_search" }` - Search the web
+  </Expandable>
+  
+  <Expandable title="Custom functions">
+    ```ruby
+    {
+      type: "function",
+      function: {
+        name: "get_weather",
+        description: "Get current weather",
+        parameters: { ... }
+      }
+    }
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField path="tool_choice" type="string | object">
+  How to select tools:
+  - `auto` (default) - Model decides
+  - `none` - No tools
+  - `required` - Must use a tool
+  - `{ type: "function", function: { name: "..." } }` - Force specific function
+</ParamField>
+
+<ParamField path="text" type="object">
+  Text output configuration:
+  
+  <Expandable title="Structured output">
+    ```ruby
+    text: {
+      format: {
+        type: "json_schema",
+        strict: true,
+        name: "Recipe",
+        schema: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            ingredients: { type: "array", items: { type: "string" } }
+          },
+          required: ["name", "ingredients"]
+        }
+      }
+    }
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField path="conversation" type="string | object">
+  Conversation ID to continue, or object with `id` to create/reference
+</ParamField>
+
+<ParamField path="previous_response_id" type="string">
+  ID of previous response to continue from
+</ParamField>
+
+<ParamField path="store" type="boolean">
+  Whether to store the response for later retrieval (default: false)
+</ParamField>
+
+<ParamField path="metadata" type="hash">
+  Optional metadata (up to 16 key-value pairs)
+</ParamField>
+
+<ParamField path="reasoning" type="object">
+  Reasoning configuration for o-series and gpt-5 models:
+  
+  <Expandable title="Properties">
+    <ParamField path="effort" type="string">
+      Reasoning effort: `low`, `medium`, or `high`
+    </ParamField>
+    
+    <ParamField path="summary" type="string">
+      Summary mode: `auto`, `concise`, or `detailed`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="top_p" type="float">
+  Nucleus sampling parameter (0-1, alternative to temperature)
+</ParamField>
+
+<ParamField path="parallel_tool_calls" type="boolean">
+  Allow parallel tool execution (default: true)
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Unique response identifier
+</ResponseField>
+
+<ResponseField name="object" type="string">
+  Object type: `response`
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp of creation
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  Model used for generation
+</ResponseField>
+
+<ResponseField name="output" type="array">
+  Array of output items (messages, tool calls, reasoning)
+  
+  <Expandable title="Message output">
+    <ResponseField name="type" type="string">
+      `message`
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      `assistant`
+    </ResponseField>
+    
+    <ResponseField name="content" type="array">
+      Array of content parts (text, images, etc.)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="usage" type="object">
+  Token usage information
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Response status: `completed`, `incomplete`, `failed`, etc.
+</ResponseField>
+
+## Stream response
+
+Creates a streaming response for real-time output.
+
+```ruby
+stream = client.responses.stream(
+  model: "gpt-4o",
+  input: "Write a haiku about coding"
+)
+
+stream.on_text_delta do |delta|
+  print delta
+end
+
+stream.run
+```
+
+### Stream helpers
+
+```ruby
+# Handle different event types
+stream.on_text_delta { |delta| print delta }
+stream.on_reasoning_delta { |delta| puts "[thinking: #{delta}]" }
+stream.on_function_call { |name, args| handle_function(name, args) }
+stream.on_completed { |response| puts "\nDone: #{response.id}" }
+stream.on_error { |error| puts "Error: #{error}" }
+```
+
+## Retrieve response
+
+Retrieves a stored response by ID.
+
+```ruby
+response = client.responses.retrieve("resp_abc123")
+```
+
+### Parameters
+
+<ParamField path="response_id" type="string" required>
+  ID of the response to retrieve
+</ParamField>
+
+<ParamField path="include" type="array">
+  Additional fields to include: `reasoning`, `audio`
+</ParamField>
+
+## Delete response
+
+Deletes a stored response.
+
+```ruby
+client.responses.delete("resp_abc123")
+```
+
+### Parameters
+
+<ParamField path="response_id" type="string" required>
+  ID of the response to delete
+</ParamField>
+
+## Cancel response
+
+Cancels a background response.
+
+```ruby
+client.responses.cancel("resp_abc123")
+```
+
+### Parameters
+
+<ParamField path="response_id" type="string" required>
+  ID of the response to cancel
+</ParamField>
+
+## Compact conversation
+
+Compacts a long conversation to fit within context limits.
+
+```ruby
+compacted = client.responses.compact(
+  model: "gpt-4o",
+  previous_response_id: "resp_abc123"
+)
+```
+
+## Examples
+
+### Basic text generation
+
+```ruby
+response = client.responses.create(
+  model: "gpt-4o",
+  input: "Explain quantum computing in simple terms",
+  max_output_tokens: 500
+)
+
+puts response.output.first.content.first.text
+```
+
+### Streaming with tool use
+
+```ruby
+stream = client.responses.stream(
+  model: "gpt-4o",
+  input: "What's the weather in San Francisco?",
+  tools: [{ type: "web_search" }]
+)
+
+stream.on_web_search_call do |query|
+  puts "Searching: #{query}"
+end
+
+stream.on_text_delta { |delta| print delta }
+stream.run
+```
+
+### Structured output
+
+```ruby
+response = client.responses.create(
+  model: "gpt-4o",
+  input: "Generate a recipe for chocolate chip cookies",
+  text: {
+    format: {
+      type: "json_schema",
+      strict: true,
+      name: "Recipe",
+      schema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          ingredients: {
+            type: "array",
+            items: { type: "string" }
+          },
+          steps: {
+            type: "array",
+            items: { type: "string" }
+          }
+        },
+        required: ["name", "ingredients", "steps"]
+      }
+    }
+  }
+)
+
+recipe = JSON.parse(response.output.first.content.first.text)
+```
+
+### Multi-turn conversation
+
+```ruby
+# First turn
+response1 = client.responses.create(
+  model: "gpt-4o",
+  input: "What is the capital of France?",
+  store: true
+)
+
+# Second turn
+response2 = client.responses.create(
+  model: "gpt-4o",
+  input: "What is its population?",
+  previous_response_id: response1.id
+)
+```
+
+### Function calling
+
+```ruby
+response = client.responses.create(
+  model: "gpt-4o",
+  input: "What's the weather in Tokyo?",
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: "get_weather",
+        description: "Get current weather for a location",
+        parameters: {
+          type: "object",
+          properties: {
+            location: { type: "string" }
+          },
+          required: ["location"]
+        }
+      }
+    }
+  ]
+)
+
+# Check for function calls
+response.output.each do |item|
+  if item.type == "function_call"
+    puts "Function: #{item.name}"
+    puts "Arguments: #{item.arguments}"
+  end
+end
+```
+
+## Related
+
+- [Text generation guide](https://platform.openai.com/docs/guides/text)
+- [Function calling guide](https://platform.openai.com/docs/guides/function-calling)
+- [Structured outputs guide](https://platform.openai.com/docs/guides/structured-outputs)
+- [Conversations API](/api/conversations)

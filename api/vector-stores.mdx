@@ -1,0 +1,345 @@
+---
+title: Vector Stores
+description: Store and search documents for retrieval-augmented generation (RAG)
+---
+
+## Overview
+
+Vector stores are collections of processed files that can be used with the `file_search` tool for retrieval-augmented generation. They automatically chunk, embed, and index your documents for semantic search.
+
+<Note>
+  Vector stores require the `OpenAI-Beta: assistants=v2` header, which is automatically added by the SDK.
+</Note>
+
+## Create vector store
+
+Creates a new vector store.
+
+```ruby
+vector_store = client.vector_stores.create(
+  name: "Product Documentation",
+  file_ids: ["file-abc123", "file-def456"]
+)
+```
+
+### Parameters
+
+<ParamField path="name" type="string">
+  Name of the vector store
+</ParamField>
+
+<ParamField path="file_ids" type="array">
+  List of file IDs to add to the vector store
+</ParamField>
+
+<ParamField path="description" type="string">
+  Description of the vector store's purpose
+</ParamField>
+
+<ParamField path="chunking_strategy" type="object">
+  How to chunk files. Options:
+  
+  <Expandable title="Auto chunking">
+    ```ruby
+    chunking_strategy: { type: "auto" }
+    ```
+    Let OpenAI automatically determine chunk size
+  </Expandable>
+  
+  <Expandable title="Static chunking">
+    ```ruby
+    chunking_strategy: {
+      type: "static",
+      static: {
+        max_chunk_size_tokens: 800,
+        chunk_overlap_tokens: 400
+      }
+    }
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField path="expires_after" type="object">
+  Expiration policy
+  
+  <Expandable title="Properties">
+    <ParamField path="anchor" type="string">
+      Anchor timestamp: `last_active_at`
+    </ParamField>
+    
+    <ParamField path="days" type="integer">
+      Days after anchor to expire (1-365)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="metadata" type="hash">
+  Optional metadata (up to 16 key-value pairs)
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Unique vector store identifier
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Name of the vector store
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Processing status: `expired`, `in_progress`, or `completed`
+</ResponseField>
+
+<ResponseField name="file_counts" type="object">
+  File processing counts:
+  
+  <Expandable title="Properties">
+    <ResponseField name="total" type="integer">
+      Total files
+    </ResponseField>
+    
+    <ResponseField name="completed" type="integer">
+      Successfully processed
+    </ResponseField>
+    
+    <ResponseField name="in_progress" type="integer">
+      Currently processing
+    </ResponseField>
+    
+    <ResponseField name="failed" type="integer">
+      Failed to process
+    </ResponseField>
+    
+    <ResponseField name="cancelled" type="integer">
+      Processing cancelled
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="usage_bytes" type="integer">
+  Total bytes used by files
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp of creation
+</ResponseField>
+
+## Retrieve vector store
+
+Retrieves a vector store by ID.
+
+```ruby
+vector_store = client.vector_stores.retrieve("vs_abc123")
+puts vector_store.status
+```
+
+### Parameters
+
+<ParamField path="vector_store_id" type="string" required>
+  ID of the vector store
+</ParamField>
+
+## Update vector store
+
+Modifies a vector store.
+
+```ruby
+vector_store = client.vector_stores.update(
+  "vs_abc123",
+  name: "Updated Product Docs",
+  metadata: { version: "2.0" }
+)
+```
+
+### Parameters
+
+<ParamField path="vector_store_id" type="string" required>
+  ID of the vector store to modify
+</ParamField>
+
+<ParamField path="name" type="string">
+  New name
+</ParamField>
+
+<ParamField path="expires_after" type="object">
+  Updated expiration policy
+</ParamField>
+
+<ParamField path="metadata" type="hash">
+  Updated metadata
+</ParamField>
+
+## List vector stores
+
+Returns a list of vector stores.
+
+```ruby
+vector_stores = client.vector_stores.list(
+  limit: 20,
+  order: :desc
+)
+
+vector_stores.data.each do |vs|
+  puts "#{vs.name} (#{vs.file_counts.completed} files)"
+end
+```
+
+### Parameters
+
+<ParamField path="limit" type="integer">
+  Number to return (1-100, default: 20)
+</ParamField>
+
+<ParamField path="order" type="string">
+  Sort order: `asc` or `desc` (default)
+</ParamField>
+
+<ParamField path="after" type="string">
+  Cursor for pagination
+</ParamField>
+
+<ParamField path="before" type="string">
+  Cursor for reverse pagination
+</ParamField>
+
+## Delete vector store
+
+Deletes a vector store.
+
+```ruby
+client.vector_stores.delete("vs_abc123")
+```
+
+### Parameters
+
+<ParamField path="vector_store_id" type="string" required>
+  ID of the vector store to delete
+</ParamField>
+
+## Search vector store
+
+Searches a vector store for relevant chunks based on a query.
+
+```ruby
+results = client.vector_stores.search(
+  "vs_abc123",
+  query: "How do I configure authentication?",
+  max_num_results: 10
+)
+
+results.data.each do |result|
+  puts "Score: #{result.score}"
+  puts "Content: #{result.content}"
+end
+```
+
+### Parameters
+
+<ParamField path="vector_store_id" type="string" required>
+  ID of the vector store to search
+</ParamField>
+
+<ParamField path="query" type="string | array" required>
+  Search query (string or array of strings)
+</ParamField>
+
+<ParamField path="max_num_results" type="integer">
+  Maximum results to return (1-50, default: 20)
+</ParamField>
+
+<ParamField path="filters" type="object">
+  File attribute filters for narrowing search results
+</ParamField>
+
+<ParamField path="ranking_options" type="object">
+  Ranking configuration options
+</ParamField>
+
+<ParamField path="rewrite_query" type="boolean">
+  Whether to rewrite the query for better vector search
+</ParamField>
+
+## File management
+
+Vector stores provide nested resources for managing files:
+
+### Add files to vector store
+
+```ruby
+file = client.vector_stores.files.create(
+  "vs_abc123",
+  file_id: "file-xyz789"
+)
+```
+
+### List files in vector store
+
+```ruby
+files = client.vector_stores.files.list("vs_abc123")
+```
+
+### Create file batch
+
+```ruby
+batch = client.vector_stores.file_batches.create(
+  "vs_abc123",
+  file_ids: ["file-1", "file-2", "file-3"]
+)
+```
+
+## Examples
+
+### RAG with vector stores
+
+<CodeGroup>
+```ruby Setup
+# Upload documents
+file1 = client.files.create(
+  file: "docs/guide.pdf",
+  purpose: "assistants"
+)
+
+file2 = client.files.create(
+  file: "docs/api.pdf",
+  purpose: "assistants"
+)
+
+# Create vector store
+vector_store = client.vector_stores.create(
+  name: "Documentation",
+  file_ids: [file1.id, file2.id],
+  chunking_strategy: { type: "auto" }
+)
+
+# Wait for processing
+loop do
+  vs = client.vector_stores.retrieve(vector_store.id)
+  break if vs.status == "completed"
+  sleep 2
+end
+```
+
+```ruby Search
+# Search for relevant content
+results = client.vector_stores.search(
+  vector_store.id,
+  query: "How do I authenticate API requests?",
+  max_num_results: 5
+)
+
+# Use results as context
+context = results.data.map(&:content).join("\n\n")
+
+response = client.responses.create(
+  model: "gpt-4o",
+  input: "Based on this documentation:\n\n#{context}\n\nHow do I authenticate?"
+)
+```
+</CodeGroup>
+
+## Related
+
+- [File search guide](https://platform.openai.com/docs/guides/tools-file-search)
+- [Files API](/api/files)
+- [Responses API](/api/responses)

@@ -1,0 +1,332 @@
+---
+title: Realtime
+description: Real-time voice and audio conversations using WebRTC and SIP
+---
+
+## Overview
+
+The Realtime API enables low-latency, bidirectional voice and audio conversations with OpenAI models. It supports WebRTC for browser-based apps and SIP for telephony integrations.
+
+## Client Secrets
+
+Client secrets are short-lived tokens that grant access to the Realtime API without exposing your main API key. Use these for client-side applications.
+
+### Create client secret
+
+Creates a client secret with session configuration.
+
+```ruby
+secret = client.realtime.client_secrets.create(
+  session: {
+    type: "realtime",
+    model: "gpt-4o-realtime-preview",
+    instructions: "You are a helpful voice assistant",
+    audio: {
+      voice: "alloy",
+      format: "pcm16"
+    }
+  },
+  expires_after: {
+    ttl: 3600  # 1 hour
+  }
+)
+
+puts secret.client_secret  # => "ek_abc123..."
+```
+
+### Parameters
+
+<ParamField path="session" type="object">
+  Session configuration for the client secret
+  
+  <Expandable title="Realtime session">
+    <ParamField path="type" type="string" required>
+      `realtime` for voice conversations
+    </ParamField>
+    
+    <ParamField path="model" type="string">
+      Model to use: `gpt-4o-realtime-preview` or `gpt-4o-mini-realtime-preview`
+    </ParamField>
+    
+    <ParamField path="instructions" type="string">
+      System instructions for the assistant
+    </ParamField>
+    
+    <ParamField path="audio" type="object">
+      Audio configuration:
+      
+      <Expandable title="Properties">
+        <ParamField path="voice" type="string">
+          Voice to use: `alloy`, `ash`, `ballad`, `coral`, `echo`, `sage`, `shimmer`, `verse`
+        </ParamField>
+        
+        <ParamField path="format" type="string">
+          Audio format: `pcm16`, `g711_ulaw`, `g711_alaw`
+        </ParamField>
+        
+        <ParamField path="sample_rate" type="integer">
+          Sample rate in Hz (8000, 16000, or 24000)
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField path="tools" type="array">
+      Tools available to the model
+    </ParamField>
+    
+    <ParamField path="max_output_tokens" type="integer">
+      Maximum tokens per response
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="expires_after" type="object">
+  Expiration configuration
+  
+  <Expandable title="Properties">
+    <ParamField path="ttl" type="integer">
+      Time to live in seconds (60-86400, default: 300)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Response
+
+<ResponseField name="client_secret" type="string">
+  The client secret token (starts with `ek_`)
+</ResponseField>
+
+<ResponseField name="session" type="object">
+  The effective session configuration
+</ResponseField>
+
+<ResponseField name="expires_at" type="integer">
+  Unix timestamp when the secret expires
+</ResponseField>
+
+## Calls
+
+Manage real-time calls, including SIP integration.
+
+### Accept call
+
+Accepts an incoming SIP call.
+
+```ruby
+client.realtime.calls.accept(
+  "call_abc123",
+  model: "gpt-4o-realtime-preview",
+  instructions: "You are a customer service assistant",
+  audio: {
+    voice: "shimmer",
+    format: "g711_ulaw"
+  }
+)
+```
+
+### Parameters
+
+<ParamField path="call_id" type="string" required>
+  Call identifier from the incoming call webhook
+</ParamField>
+
+<ParamField path="model" type="string">
+  Realtime model to use
+</ParamField>
+
+<ParamField path="instructions" type="string">
+  System instructions
+</ParamField>
+
+<ParamField path="audio" type="object">
+  Audio configuration (voice, format, sample rate)
+</ParamField>
+
+<ParamField path="tools" type="array">
+  Available tools
+</ParamField>
+
+### Hangup call
+
+Ends an active call.
+
+```ruby
+client.realtime.calls.hangup("call_abc123")
+```
+
+### Parameters
+
+<ParamField path="call_id" type="string" required>
+  ID of the call to end
+</ParamField>
+
+### Refer call
+
+Transfers a SIP call to another destination.
+
+```ruby
+client.realtime.calls.refer(
+  "call_abc123",
+  target_uri: "sip:support@example.com"
+)
+```
+
+### Parameters
+
+<ParamField path="call_id" type="string" required>
+  ID of the call to transfer
+</ParamField>
+
+<ParamField path="target_uri" type="string" required>
+  SIP URI to transfer to (e.g., `sip:user@domain.com` or `tel:+15551234567`)
+</ParamField>
+
+### Reject call
+
+Declines an incoming SIP call.
+
+```ruby
+client.realtime.calls.reject(
+  "call_abc123",
+  status_code: 486  # Busy Here
+)
+```
+
+### Parameters
+
+<ParamField path="call_id" type="string" required>
+  ID of the call to reject
+</ParamField>
+
+<ParamField path="status_code" type="integer">
+  SIP response code (default: 603 - Decline). Common codes:
+  - 486 - Busy Here
+  - 603 - Decline
+  - 480 - Temporarily Unavailable
+</ParamField>
+
+## Examples
+
+### WebRTC client authentication
+
+<CodeGroup>
+```ruby Server-side
+# Generate client secret on your server
+secret = client.realtime.client_secrets.create(
+  session: {
+    type: "realtime",
+    model: "gpt-4o-realtime-preview",
+    instructions: "You are a friendly voice assistant",
+    audio: {
+      voice: "alloy",
+      format: "pcm16",
+      sample_rate: 24000
+    }
+  },
+  expires_after: { ttl: 3600 }
+)
+
+# Send to client
+render json: { client_secret: secret.client_secret }
+```
+
+```javascript Client-side
+// Use the client secret in your WebRTC app
+const pc = new RTCPeerConnection();
+
+// Get ephemeral token from your server
+const { client_secret } = await fetch('/api/token').then(r => r.json());
+
+// Connect to Realtime API
+const offer = await pc.createOffer();
+await pc.setLocalDescription(offer);
+
+const response = await fetch('https://api.openai.com/v1/realtime', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${client_secret}`,
+    'Content-Type': 'application/sdp'
+  },
+  body: offer.sdp
+});
+
+const answer = await response.text();
+await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+```
+</CodeGroup>
+
+### SIP call handling
+
+```ruby
+# In your webhook handler for incoming calls
+post '/webhooks/sip/inbound' do
+  call_id = params[:call_id]
+  from_number = params[:from]
+  
+  # Accept the call with a configured session
+  client.realtime.calls.accept(
+    call_id,
+    model: "gpt-4o-realtime-preview",
+    instructions: "You are a customer support agent for Acme Corp. Be helpful and professional.",
+    audio: {
+      voice: "shimmer",
+      format: "g711_ulaw",
+      sample_rate: 8000
+    },
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: "lookup_order",
+          description: "Look up customer order status",
+          parameters: {
+            type: "object",
+            properties: {
+              order_id: { type: "string" }
+            }
+          }
+        }
+      }
+    ]
+  )
+  
+  status 200
+end
+
+# Transfer call to human agent
+post '/transfer/:call_id' do
+  client.realtime.calls.refer(
+    params[:call_id],
+    target_uri: "sip:agents@support.example.com"
+  )
+  
+  status 200
+end
+```
+
+### Voice assistant with custom voice
+
+```ruby
+secret = client.realtime.client_secrets.create(
+  session: {
+    type: "realtime",
+    model: "gpt-4o-realtime-preview",
+    instructions: "You are a meditation guide. Speak slowly and calmly.",
+    audio: {
+      voice: "ballad",  # Calm, soothing voice
+      format: "pcm16",
+      sample_rate: 24000
+    },
+    output_modalities: ["audio", "text"],
+    temperature: 0.7
+  },
+  expires_after: { ttl: 7200 }  # 2 hours
+)
+```
+
+## Related
+
+- [Realtime API guide](https://platform.openai.com/docs/guides/realtime)
+- [WebRTC guide](https://platform.openai.com/docs/guides/realtime-webrtc)
+- [SIP integration guide](https://platform.openai.com/docs/guides/realtime-sip)
+- [Available voices](https://platform.openai.com/docs/guides/text-to-speech/voice-options)

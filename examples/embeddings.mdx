@@ -1,0 +1,230 @@
+---
+title: "Embeddings"
+description: "Create vector embeddings for text using the OpenAI Ruby SDK"
+---
+
+## Create Embeddings
+
+Generate embedding vectors that represent the semantic meaning of input text.
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+response = client.embeddings.create(
+  input: "The quick brown fox jumped over the lazy dog",
+  model: "text-embedding-3-small"
+)
+
+# Access the embedding vector
+embedding = response.data.first.embedding
+puts "Embedding dimensions: #{embedding.length}"
+puts "First 5 values: #{embedding.take(5)}"
+```
+
+## Embedding Models
+
+OpenAI offers several embedding models with different capabilities and sizes.
+
+<CodeGroup>
+```ruby text-embedding-3-small
+# Fast and efficient for most use cases
+response = client.embeddings.create(
+  input: "Sample text",
+  model: "text-embedding-3-small"
+)
+```
+
+```ruby text-embedding-3-large
+# Higher accuracy for complex tasks
+response = client.embeddings.create(
+  input: "Sample text",
+  model: "text-embedding-3-large"
+)
+```
+
+```ruby text-embedding-ada-002
+# Legacy model (still supported)
+response = client.embeddings.create(
+  input: "Sample text",
+  model: "text-embedding-ada-002"
+)
+```
+</CodeGroup>
+
+## Batch Embeddings
+
+Create embeddings for multiple texts in a single API call for better efficiency.
+
+```ruby
+texts = [
+  "The quick brown fox jumps over the lazy dog",
+  "Machine learning is a subset of artificial intelligence",
+  "Ruby is a dynamic, open source programming language"
+]
+
+response = client.embeddings.create(
+  input: texts,
+  model: "text-embedding-3-small"
+)
+
+# Process each embedding
+response.data.each_with_index do |item, i|
+  puts "Text #{i + 1}: #{texts[i]}"
+  puts "Embedding index: #{item.index}"
+  puts "Dimensions: #{item.embedding.length}\n\n"
+end
+```
+
+<Note>
+  Batch processing is more efficient than making individual API calls for each text.
+</Note>
+
+## Custom Dimensions
+
+Reduce embedding dimensions for `text-embedding-3` models to save storage and improve performance.
+
+```ruby
+response = client.embeddings.create(
+  input: "Sample text for dimension reduction",
+  model: "text-embedding-3-small",
+  dimensions: 512  # Default is 1536
+)
+
+embedding = response.data.first.embedding
+puts "Reduced dimensions: #{embedding.length}"  # 512
+```
+
+<Note>
+  Dimension reduction is only supported in `text-embedding-3-small` and `text-embedding-3-large` models.
+</Note>
+
+## Encoding Formats
+
+Choose between float and base64 encoding formats.
+
+<Tabs>
+  <Tab title="Float (default)">
+    ```ruby
+    response = client.embeddings.create(
+      input: "Sample text",
+      model: "text-embedding-3-small",
+      encoding_format: "float"
+    )
+
+    # Returns array of floating point numbers
+    embedding = response.data.first.embedding
+    puts embedding.class  # Array
+    puts embedding.first.class  # Float
+    ```
+  </Tab>
+  <Tab title="Base64">
+    ```ruby
+    require "base64"
+
+    response = client.embeddings.create(
+      input: "Sample text",
+      model: "text-embedding-3-small",
+      encoding_format: "base64"
+    )
+
+    # Returns base64-encoded string
+    encoded = response.data.first.embedding
+    
+    # Decode if needed
+    decoded = Base64.decode64(encoded)
+    ```
+  </Tab>
+</Tabs>
+
+## Similarity Search
+
+Use embeddings to find semantically similar texts by comparing vector distances.
+
+```ruby
+require "matrix"
+
+# Calculate cosine similarity between two embeddings
+def cosine_similarity(a, b)
+  dot_product = a.zip(b).map { |x, y| x * y }.sum
+  magnitude_a = Math.sqrt(a.map { |x| x**2 }.sum)
+  magnitude_b = Math.sqrt(b.map { |x| x**2 }.sum)
+  dot_product / (magnitude_a * magnitude_b)
+end
+
+# Create embeddings for query and documents
+query = "What is machine learning?"
+documents = [
+  "Machine learning is a type of AI",
+  "Ruby is a programming language",
+  "Deep learning uses neural networks"
+]
+
+all_texts = [query] + documents
+response = client.embeddings.create(
+  input: all_texts,
+  model: "text-embedding-3-small"
+)
+
+query_embedding = response.data[0].embedding
+doc_embeddings = response.data[1..].map(&:embedding)
+
+# Find most similar document
+similarities = doc_embeddings.map do |doc_emb|
+  cosine_similarity(query_embedding, doc_emb)
+end
+
+most_similar_idx = similarities.each_with_index.max_by { |sim, _| sim }[1]
+puts "Most similar document: #{documents[most_similar_idx]}"
+puts "Similarity score: #{similarities[most_similar_idx]}"
+```
+
+## Response Structure
+
+Understand the structure of the embedding response.
+
+```ruby
+response = client.embeddings.create(
+  input: "Sample text",
+  model: "text-embedding-3-small"
+)
+
+# Response object structure
+puts response.data          # Array of embedding objects
+puts response.model         # Model used
+puts response.object        # "list"
+puts response.usage.prompt_tokens  # Tokens used
+puts response.usage.total_tokens   # Total tokens
+
+# Individual embedding structure
+embedding_obj = response.data.first
+puts embedding_obj.embedding  # Vector of floats
+puts embedding_obj.index      # Index in array (0-based)
+puts embedding_obj.object     # "embedding"
+```
+
+## Token Arrays
+
+Pass tokenized input directly as integer arrays.
+
+```ruby
+# Single token array
+response = client.embeddings.create(
+  input: [123, 456, 789],  # Array of token IDs
+  model: "text-embedding-3-small"
+)
+
+# Multiple token arrays
+response = client.embeddings.create(
+  input: [
+    [123, 456],
+    [789, 012]
+  ],
+  model: "text-embedding-3-small"
+)
+```
+
+<Note>
+  Token arrays must not exceed 2048 dimensions for all embedding models, and the total token count across all inputs is subject to API limits.
+</Note>

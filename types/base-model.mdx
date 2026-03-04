@@ -1,0 +1,271 @@
+---
+title: BaseModel
+description: BaseModel provides convenient methods and features for all parameter and response objects in the OpenAI Ruby SDK
+---
+
+All parameter and response objects in the OpenAI Ruby SDK inherit from `OpenAI::Internal::Type::BaseModel`, which provides several conveniences for working with API data.
+
+## Core Features
+
+BaseModel provides four main categories of functionality:
+
+### 1. Flexible Field Access
+
+All fields, including unknown or undocumented ones, are accessible with hash-style syntax:
+
+```ruby
+completion = client.chat.completions.create(
+  messages: [{role: "user", content: "Hello"}],
+  model: "gpt-5.2"
+)
+
+# Access fields with hash syntax
+content = completion[:choices][0][:message][:content]
+
+# Or use method syntax
+content = completion.choices[0].message.content
+```
+
+#### Pattern Matching
+
+BaseModel objects support Ruby's pattern matching syntax:
+
+```ruby
+case completion
+in { choices: [{ message: { content: content } }] }
+  puts "Response: #{content}"
+end
+
+# Destructuring syntax
+completion => { choices: choices }
+puts "Got #{choices.size} choices"
+```
+
+### 2. Structural Equality
+
+Two API responses are considered equal if they contain the same data:
+
+```ruby
+response1 = client.chat.completions.create(
+  messages: [{role: "user", content: "Say 'test'"}],
+  model: "gpt-5.2",
+  seed: 42
+)
+
+response2 = client.chat.completions.create(
+  messages: [{role: "user", content: "Say 'test'"}],
+  model: "gpt-5.2",
+  seed: 42
+)
+
+# If responses have identical data, they are equal
+if response1 == response2
+  puts "Responses are structurally equivalent"
+end
+```
+
+<Note>
+This is structural equality, not object identity. Two different API calls that return the same data will be considered equal.
+</Note>
+
+### 3. Pretty Printing
+
+Both instances and classes can be pretty-printed for debugging:
+
+```ruby
+# Pretty-print an instance
+pp completion
+
+# Output:
+# #<OpenAI::Chat::ChatCompletion
+#  id="chatcmpl-123",
+#  object="chat.completion",
+#  created=1677652288,
+#  model="gpt-5.2-0125",
+#  choices=
+#   [#<OpenAI::Chat::ChatCompletion::Choice
+#     index=0,
+#     message=
+#      #<OpenAI::Chat::ChatCompletionMessage
+#       role="assistant",
+#       content="Hello! How can I help you today?">,
+#     finish_reason="stop">],
+#  usage=
+#   #<OpenAI::CompletionUsage
+#    prompt_tokens=9,
+#    completion_tokens=9,
+#    total_tokens=18>>
+```
+
+Pretty-printing classes shows their structure:
+
+```ruby
+pp OpenAI::Chat::CompletionCreateParams
+# Shows all available parameters and their types
+```
+
+### 4. Serialization Helpers
+
+BaseModel provides multiple serialization methods:
+
+<Tabs>
+  <Tab title="to_h">
+    ```ruby
+    # Shallow hash conversion
+    hash = completion.to_h
+    # => { id: "chatcmpl-123", object: "chat.completion", ... }
+    
+    # Nested objects remain as BaseModel instances
+    hash[:choices][0].class
+    # => OpenAI::Chat::ChatCompletion::Choice
+    ```
+  </Tab>
+  
+  <Tab title="deep_to_h">
+    ```ruby
+    # Deep hash conversion
+    hash = completion.deep_to_h
+    # => { id: "chatcmpl-123", object: "chat.completion", ... }
+    
+    # All nested objects converted to hashes
+    hash[:choices][0].class
+    # => Hash
+    ```
+  </Tab>
+  
+  <Tab title="to_json">
+    ```ruby
+    # Convert to JSON string
+    json = completion.to_json
+    # => "{\"id\":\"chatcmpl-123\",\"object\":\"chat.completion\",...}"
+    
+    # Pretty JSON
+    puts JSON.pretty_generate(completion.deep_to_h)
+    ```
+  </Tab>
+  
+  <Tab title="to_yaml">
+    ```ruby
+    # Convert to YAML string
+    yaml = completion.to_yaml
+    
+    puts yaml
+    # Output:
+    # ---
+    # id: chatcmpl-123
+    # object: chat.completion
+    # created: 1677652288
+    # ...
+    ```
+  </Tab>
+</Tabs>
+
+## Accessing Undocumented Fields
+
+BaseModel's hash access syntax lets you read undocumented or future API fields:
+
+```ruby
+completion = client.chat.completions.create(
+  messages: [{role: "user", content: "Hello"}],
+  model: "gpt-5.2"
+)
+
+# Access a field that might be added in the future
+experimental_data = completion[:experimental_feature]
+
+# Returns nil if the field doesn't exist
+experimental_data.nil?
+# => true (assuming the field doesn't exist)
+```
+
+This makes the SDK forward-compatible with API changes.
+
+## Usage Examples
+
+### Logging Responses
+
+```ruby
+require 'logger'
+
+logger = Logger.new(STDOUT)
+
+completion = client.chat.completions.create(
+  messages: [{role: "user", content: "What is Ruby?"}],
+  model: "gpt-5.2"
+)
+
+# Log the full response as JSON
+logger.info "API Response: #{completion.to_json}"
+
+# Log specific fields
+logger.info "Token usage: #{completion.usage.to_h}"
+```
+
+### Caching Responses
+
+```ruby
+require 'json'
+
+# Save response to file
+File.write('response.json', completion.to_json)
+
+# Load and parse later
+data = JSON.parse(File.read('response.json'))
+
+# Access the cached data
+puts data['choices'][0]['message']['content']
+```
+
+### Testing with Structural Equality
+
+```ruby
+require 'minitest/autorun'
+
+class OpenAITest < Minitest::Test
+  def test_deterministic_response
+    response1 = client.chat.completions.create(
+      messages: [{role: "user", content: "Count to 3"}],
+      model: "gpt-5.2",
+      seed: 42,
+      temperature: 0
+    )
+    
+    response2 = client.chat.completions.create(
+      messages: [{role: "user", content: "Count to 3"}],
+      model: "gpt-5.2",
+      seed: 42,
+      temperature: 0
+    )
+    
+    # With the same seed and temperature=0, responses should match
+    assert_equal response1, response2
+  end
+end
+```
+
+## Implementation Details
+
+<Accordion title="BaseModel source location">
+  The BaseModel implementation is in `lib/openai/internal/type/base_model.rb` in the gem source code.
+</Accordion>
+
+<Accordion title="Method resolution">
+  BaseModel uses Ruby's `method_missing` to provide both method-style (dot notation) and hash-style (bracket notation) access to fields. Method-style access is preferred for known fields, while hash-style access is useful for dynamic or unknown fields.
+</Accordion>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Sorbet Types" icon="file-code" href="/types/sorbet">
+    Sorbet type definitions and RBI files
+  </Card>
+  <Card title="RBS Types" icon="file-lines" href="/types/rbs">
+    RBS type signatures
+  </Card>
+  <Card title="Structured Outputs" icon="shapes" href="/advanced/structured-outputs">
+    BaseModel for structured outputs
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/core/error-handling">
+    Error response objects
+  </Card>
+</CardGroup>

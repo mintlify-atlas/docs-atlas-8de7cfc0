@@ -1,0 +1,150 @@
+---
+title: 'Client Configuration'
+description: 'Learn how to instantiate and configure the OpenAI Ruby client'
+---
+
+## Creating a Client
+
+The `OpenAI::Client` class is the main entry point for interacting with the OpenAI API. Create a client instance to access all API resources.
+
+### Basic Usage
+
+```ruby
+require 'openai'
+
+client = OpenAI::Client.new(api_key: 'your-api-key')
+```
+
+## Configuration Options
+
+The client accepts the following initialization parameters:
+
+<ParamField path="api_key" type="string" required>
+  Your OpenAI API key. Defaults to `ENV["OPENAI_API_KEY"]`.
+  
+  <Warning>
+    The client will raise an `ArgumentError` if no API key is provided either as a parameter or environment variable.
+  </Warning>
+</ParamField>
+
+<ParamField path="organization" type="string">
+  Your organization ID for multi-organization accounts. Defaults to `ENV["OPENAI_ORG_ID"]`.
+  
+  Sets the `openai-organization` header on all requests.
+</ParamField>
+
+<ParamField path="project" type="string">
+  Your project ID for project-scoped requests. Defaults to `ENV["OPENAI_PROJECT_ID"]`.
+  
+  Sets the `openai-project` header on all requests.
+</ParamField>
+
+<ParamField path="webhook_secret" type="string">
+  Secret key for validating webhook signatures. Defaults to `ENV["OPENAI_WEBHOOK_SECRET"]`.
+</ParamField>
+
+<ParamField path="base_url" type="string">
+  Override the default API base URL. Defaults to `ENV["OPENAI_BASE_URL"]` or `"https://api.openai.com/v1"`.
+  
+  Useful for testing or using proxy servers.
+</ParamField>
+
+<ParamField path="max_retries" type="integer" default="2">
+  Maximum number of retry attempts for failed requests. See [Retries](/core/retries) for details.
+</ParamField>
+
+<ParamField path="timeout" type="float" default="600.0">
+  Request timeout in seconds. See [Timeouts](/core/timeouts) for details.
+</ParamField>
+
+<ParamField path="initial_retry_delay" type="float" default="0.5">
+  Initial delay in seconds before the first retry attempt. See [Retries](/core/retries) for details.
+</ParamField>
+
+<ParamField path="max_retry_delay" type="float" default="8.0">
+  Maximum delay in seconds between retry attempts. See [Retries](/core/retries) for details.
+</ParamField>
+
+## Environment Variables
+
+<Steps>
+  <Step title="Set your API key">
+    The most common way to configure the client is via environment variables:
+    
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    export OPENAI_ORG_ID="org-..."
+    export OPENAI_PROJECT_ID="proj_..."
+    ```
+  </Step>
+  
+  <Step title="Initialize without parameters">
+    When environment variables are set, you can create a client without passing parameters:
+    
+    ```ruby
+    client = OpenAI::Client.new
+    ```
+  </Step>
+</Steps>
+
+## Advanced Configuration
+
+### Custom Base URL
+
+```ruby
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  base_url: 'https://your-proxy.example.com/v1'
+)
+```
+
+### Multiple Organizations
+
+```ruby
+# Client for organization A
+client_a = OpenAI::Client.new(
+  api_key: 'key-a',
+  organization: 'org-a'
+)
+
+# Client for organization B
+client_b = OpenAI::Client.new(
+  api_key: 'key-b',
+  organization: 'org-b'
+)
+```
+
+### Custom Retry and Timeout Behavior
+
+```ruby
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  max_retries: 5,
+  timeout: 120.0,
+  initial_retry_delay: 1.0,
+  max_retry_delay: 16.0
+)
+```
+
+## Available Resources
+
+Once initialized, the client provides access to all API resources:
+
+```ruby
+client.chat              # Chat completions
+client.completions       # Text completions
+client.embeddings        # Embeddings
+client.images            # Image generation
+client.audio             # Audio transcription and TTS
+client.files             # File management
+client.models            # Model information
+client.moderations       # Content moderation
+client.fine_tuning       # Fine-tuning jobs
+client.batches           # Batch processing
+client.vector_stores     # Vector store management
+client.beta              # Beta features
+```
+
+<Note>
+  See the API reference for detailed documentation on each resource.
+</Note>

@@ -1,0 +1,293 @@
+---
+title: 'Timeout Configuration'
+description: 'Configure request timeout limits and handle timeout errors'
+---
+
+## Default Timeout
+
+The OpenAI Ruby SDK has a default timeout of **600 seconds (10 minutes)** for all requests:
+
+```ruby
+# lib/openai/client.rb:9
+DEFAULT_TIMEOUT_IN_SECONDS = 600.0
+```
+
+This generous default accommodates longer-running operations like:
+- Large batch processing
+- Fine-tuning jobs
+- Audio transcription of long files
+- Image generation with multiple variations
+
+## Configuring Timeouts
+
+### Global Client Timeout
+
+Set a timeout for all requests made by a client:
+
+```ruby
+# 2 minute timeout for all requests
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  timeout: 120.0
+)
+
+# 30 second timeout
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  timeout: 30.0
+)
+
+# No timeout (wait indefinitely - not recommended)
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  timeout: 0.0
+)
+```
+
+<Warning>
+  Setting `timeout: 0.0` disables the timeout entirely. This is not recommended for production use as it can cause your application to hang indefinitely.
+</Warning>
+
+### Per-Request Timeout
+
+Override the timeout for individual requests:
+
+```ruby
+client = OpenAI::Client.new(api_key: 'your-api-key')
+
+# Quick request with 10 second timeout
+response = client.chat.completions.create(
+  {
+    model: 'gpt-3.5-turbo',
+    messages: [{role: 'user', content: 'Quick question'}]
+  },
+  timeout: 10.0
+)
+
+# Long-running request with extended timeout
+response = client.audio.transcriptions.create(
+  {
+    file: large_audio_file,
+    model: 'whisper-1'
+  },
+  timeout: 900.0  # 15 minutes
+)
+```
+
+## Timeout Implementation
+
+The timeout is enforced at the HTTP request level:
+
+```ruby
+# lib/openai/internal/transport/base_client.rb:294-297
+timeout = opts.fetch(:timeout, @timeout).to_f.clamp(0..)
+unless headers.key?("x-stainless-timeout") || timeout.zero?
+  headers["x-stainless-timeout"] = timeout.to_s
+end
+```
+
+```ruby
+# lib/openai/internal/transport/base_client.rb:376
+input = {**request.except(:timeout), deadline: OpenAI::Internal::Util.monotonic_secs + timeout}
+```
+
+The SDK calculates an absolute deadline based on the current time plus the timeout value, ensuring accurate timeout enforcement even across retries.
+
+<Note>
+  Timeouts are measured from when the request is first sent, not from when it's created. Multiple retries count against the same overall timeout.
+</Note>
+
+## Handling Timeout Errors
+
+When a request times out, the SDK raises an `APITimeoutError`:
+
+```ruby
+begin
+  response = client.chat.completions.create(
+    {
+      model: 'gpt-4',
+      messages: [{role: 'user', content: 'Hello!'}]
+    },
+    timeout: 5.0
+  )
+rescue OpenAI::Errors::APITimeoutError => e
+  puts "Request timed out: #{e.message}"
+  puts "URL: #{e.url}"
+  # Handle timeout - maybe retry with longer timeout or use streaming
+end
+```
+
+### Timeout Error Details
+
+The `APITimeoutError` inherits from `APIConnectionError` and includes:
+
+```ruby
+# lib/openai/errors.rb:124-145
+class APITimeoutError < OpenAI::Errors::APIConnectionError
+  def initialize(
+    url:,
+    status: nil,
+    headers: nil,
+    body: nil,
+    request: nil,
+    response: nil,
+    message: "Request timed out."
+  )
+    super
+  end
+end
+```
+
+<ParamField path="url" type="URI">
+  The URL that timed out
+</ParamField>
+
+<ParamField path="message" type="string" default="Request timed out.">
+  Error message
+</ParamField>
+
+## Timeout vs. Retry Interaction
+
+Timeouts interact with retries in important ways:
+
+```ruby
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  timeout: 30.0,
+  max_retries: 2
+)
+
+# If the first attempt times out after 30s,
+# retries will still be attempted, but each retry
+# gets a fresh 30s timeout window
+```
+
+<Warning>
+  The total time a request can take is approximately `timeout * (max_retries + 1)`. A 30 second timeout with 2 retries could take up to 90 seconds.
+</Warning>
+
+## Timeout Best Practices
+
+<Steps>
+  <Step title="Use shorter timeouts for simple requests">
+    For simple chat completions or embeddings, use shorter timeouts:
+    
+    ```ruby
+    client.chat.completions.create(
+      {model: 'gpt-3.5-turbo', messages: messages},
+      timeout: 30.0
+    )
+    ```
+  </Step>
+  
+  <Step title="Use longer timeouts for complex operations">
+    For image generation, audio processing, or long completions:
+    
+    ```ruby
+    client.images.generate(
+      {model: 'dall-e-3', prompt: prompt},
+      timeout: 120.0
+    )
+    ```
+  </Step>
+  
+  <Step title="Consider streaming for long responses">
+    Instead of increasing timeout, use streaming to get incremental results:
+    
+    ```ruby
+    client.chat.completions.create(
+      {
+        model: 'gpt-4',
+        messages: messages,
+        stream: true
+      },
+      timeout: 60.0  # Shorter timeout for initial connection
+    ) do |chunk|
+      print chunk.choices.first.delta.content
+    end
+    ```
+  </Step>
+  
+  <Step title="Set appropriate timeouts for your environment">
+    Consider network latency and reliability:
+    - Low-latency environments: 30-60 seconds
+    - High-latency or unreliable networks: 120-300 seconds
+    - Background jobs: 600+ seconds
+  </Step>
+</Steps>
+
+## Timeout Header
+
+The SDK includes the timeout value in request headers for debugging:
+
+```ruby
+# lib/openai/internal/transport/base_client.rb:294-297
+timeout = opts.fetch(:timeout, @timeout).to_f.clamp(0..)
+unless headers.key?("x-stainless-timeout") || timeout.zero?
+  headers["x-stainless-timeout"] = timeout.to_s
+end
+```
+
+This allows OpenAI's servers to see the client-side timeout configuration, which can help with debugging timeout issues.
+
+## Complete Example
+
+```ruby
+require 'openai'
+
+# Create client with moderate default timeout
+client = OpenAI::Client.new(
+  api_key: ENV['OPENAI_API_KEY'],
+  timeout: 60.0,     # 1 minute default
+  max_retries: 2
+)
+
+# Quick request with short timeout
+begin
+  response = client.chat.completions.create(
+    {
+      model: 'gpt-3.5-turbo',
+      messages: [{role: 'user', content: 'Quick question'}]
+    },
+    timeout: 10.0
+  )
+  puts response.choices.first.message.content
+rescue OpenAI::Errors::APITimeoutError => e
+  puts "Request timed out after 10 seconds"
+end
+
+# Long request with extended timeout
+begin
+  response = client.chat.completions.create(
+    {
+      model: 'gpt-4',
+      messages: [
+        {role: 'system', content: 'You are a helpful assistant.'},
+        {role: 'user', content: 'Write a detailed essay...'}
+      ],
+      max_tokens: 4000
+    },
+    timeout: 300.0  # 5 minutes for long response
+  )
+  puts response.choices.first.message.content
+rescue OpenAI::Errors::APITimeoutError => e
+  puts "Long request timed out"
+  # Maybe switch to streaming for very long responses
+end
+
+# Streaming avoids timeout issues for long responses
+client.chat.completions.create(
+  {
+    model: 'gpt-4',
+    messages: messages,
+    stream: true
+  },
+  timeout: 60.0  # Only need timeout for initial connection
+) do |chunk|
+  print chunk.choices.first.delta.content
+end
+```
+
+<Note>
+  For production applications, configure timeouts based on your actual usage patterns and monitor timeout errors to tune the values appropriately.
+</Note>

@@ -1,0 +1,266 @@
+---
+title: 'Error Handling'
+description: 'Handle errors and exceptions when working with the OpenAI API'
+---
+
+## Error Hierarchy
+
+All errors in the OpenAI Ruby SDK inherit from a common base class, making it easy to catch and handle exceptions.
+
+```ruby
+OpenAI::Errors::Error                    # Base error class
+├── OpenAI::Errors::ConversionError      # Type conversion failures
+├── OpenAI::Errors::InvalidWebhookSignatureError
+└── OpenAI::Errors::APIError             # Base API error
+    ├── OpenAI::Errors::APIConnectionError
+    │   └── OpenAI::Errors::APITimeoutError
+    └── OpenAI::Errors::APIStatusError
+        ├── OpenAI::Errors::BadRequestError          # 400
+        ├── OpenAI::Errors::AuthenticationError      # 401
+        ├── OpenAI::Errors::PermissionDeniedError    # 403
+        ├── OpenAI::Errors::NotFoundError            # 404
+        ├── OpenAI::Errors::ConflictError            # 409
+        ├── OpenAI::Errors::UnprocessableEntityError # 422
+        ├── OpenAI::Errors::RateLimitError           # 429
+        └── OpenAI::Errors::InternalServerError      # 500+
+```
+
+## Basic Error Handling
+
+```ruby
+begin
+  response = client.chat.completions.create(
+    model: 'gpt-4',
+    messages: [{role: 'user', content: 'Hello!'}]
+  )
+rescue OpenAI::Errors::Error => e
+  puts "An error occurred: #{e.message}"
+end
+```
+
+## API Status Errors
+
+HTTP status code errors include additional metadata about the failed request.
+
+### Error Attributes
+
+<ParamField path="status" type="integer">
+  The HTTP status code (e.g., 400, 401, 500)
+</ParamField>
+
+<ParamField path="code" type="string | nil">
+  The error code returned by the API
+</ParamField>
+
+<ParamField path="param" type="string | nil">
+  The parameter that caused the error, if applicable
+</ParamField>
+
+<ParamField path="type" type="string | nil">
+  The error type returned by the API
+</ParamField>
+
+<ParamField path="body" type="object | nil">
+  The raw response body from the API
+</ParamField>
+
+<ParamField path="headers" type="hash | nil">
+  The response headers
+</ParamField>
+
+<ParamField path="url" type="URI">
+  The URL of the failed request
+</ParamField>
+
+### Example Usage
+
+```ruby
+begin
+  client.chat.completions.create(
+    model: 'gpt-4',
+    messages: [{role: 'user', content: 'Hi'}]
+  )
+rescue OpenAI::Errors::APIStatusError => e
+  puts "Status: #{e.status}"
+  puts "Code: #{e.code}"
+  puts "Type: #{e.type}"
+  puts "Param: #{e.param}"
+  puts "URL: #{e.url}"
+  puts "Body: #{e.body}"
+end
+```
+
+## Error Types Reference
+
+### Client Errors (4xx)
+
+<CodeGroup>
+
+```ruby BadRequestError (400)
+rescue OpenAI::Errors::BadRequestError => e
+  # Invalid request parameters
+  puts "Bad request: #{e.message}"
+  puts "Invalid parameter: #{e.param}" if e.param
+end
+```
+
+```ruby AuthenticationError (401)
+rescue OpenAI::Errors::AuthenticationError => e
+  # Invalid or missing API key
+  puts "Authentication failed: #{e.message}"
+  # Check your API key configuration
+end
+```
+
+```ruby PermissionDeniedError (403)
+rescue OpenAI::Errors::PermissionDeniedError => e
+  # API key lacks required permissions
+  puts "Permission denied: #{e.message}"
+  # Check organization and project settings
+end
+```
+
+```ruby NotFoundError (404)
+rescue OpenAI::Errors::NotFoundError => e
+  # Resource not found
+  puts "Not found: #{e.message}"
+  # Verify resource ID is correct
+end
+```
+
+```ruby ConflictError (409)
+rescue OpenAI::Errors::ConflictError => e
+  # Resource conflict (e.g., duplicate operation)
+  puts "Conflict: #{e.message}"
+end
+```
+
+```ruby UnprocessableEntityError (422)
+rescue OpenAI::Errors::UnprocessableEntityError => e
+  # Request was well-formed but semantically invalid
+  puts "Unprocessable entity: #{e.message}"
+end
+```
+
+```ruby RateLimitError (429)
+rescue OpenAI::Errors::RateLimitError => e
+  # Rate limit exceeded
+  puts "Rate limited: #{e.message}"
+  
+  # Check retry-after header
+  retry_after = e.headers&.[]('retry-after')
+  puts "Retry after: #{retry_after} seconds" if retry_after
+end
+```
+
+</CodeGroup>
+
+### Server Errors (5xx)
+
+```ruby
+rescue OpenAI::Errors::InternalServerError => e
+  # Server error (500, 502, 503, 504, etc.)
+  puts "Server error: #{e.message}"
+  puts "Status: #{e.status}"
+  # These are automatically retried by the SDK
+end
+```
+
+### Connection Errors
+
+<CodeGroup>
+
+```ruby APIConnectionError
+rescue OpenAI::Errors::APIConnectionError => e
+  # Network connectivity issues
+  puts "Connection error: #{e.message}"
+  puts "Failed to connect to: #{e.url}"
+  # Check network connectivity
+end
+```
+
+```ruby APITimeoutError
+rescue OpenAI::Errors::APITimeoutError => e
+  # Request exceeded timeout
+  puts "Request timed out: #{e.message}"
+  # Consider increasing timeout or using streaming
+end
+```
+
+</CodeGroup>
+
+### Conversion Errors
+
+```ruby
+rescue OpenAI::Errors::ConversionError => e
+  # Failed to parse API response
+  puts "Conversion error: #{e.message}"
+  # Use bracket notation to access unparsed data
+end
+```
+
+## HTTP Status Code Table
+
+| Status Code | Error Class | Description | Retryable |
+|------------|-------------|-------------|-----------|
+| 400 | `BadRequestError` | Invalid request parameters | No |
+| 401 | `AuthenticationError` | Invalid or missing API key | No |
+| 403 | `PermissionDeniedError` | Insufficient permissions | No |
+| 404 | `NotFoundError` | Resource not found | No |
+| 408 | `APIStatusError` | Request timeout | Yes |
+| 409 | `ConflictError` | Resource conflict | Yes |
+| 422 | `UnprocessableEntityError` | Semantic validation error | No |
+| 429 | `RateLimitError` | Rate limit exceeded | Yes |
+| 500+ | `InternalServerError` | Server error | Yes |
+
+<Note>
+  Retryable errors are automatically retried by the SDK according to the configured retry policy. See [Retries](/core/retries) for details.
+</Note>
+
+## Comprehensive Error Handling
+
+```ruby
+begin
+  response = client.chat.completions.create(
+    model: 'gpt-4',
+    messages: [{role: 'user', content: 'Hello!'}]
+  )
+rescue OpenAI::Errors::AuthenticationError => e
+  # Handle authentication failures
+  logger.error "Invalid API key: #{e.message}"
+  notify_admin(e)
+rescue OpenAI::Errors::RateLimitError => e
+  # Handle rate limiting
+  retry_after = e.headers&.[]('retry-after')&.to_i || 60
+  logger.warn "Rate limited, retrying after #{retry_after}s"
+  sleep(retry_after)
+  retry
+rescue OpenAI::Errors::APITimeoutError => e
+  # Handle timeouts
+  logger.error "Request timed out: #{e.url}"
+  # Maybe use streaming for long requests
+rescue OpenAI::Errors::InternalServerError => e
+  # Handle server errors
+  logger.error "OpenAI server error (#{e.status}): #{e.message}"
+  # SDK already retried, this is a persistent failure
+rescue OpenAI::Errors::APIError => e
+  # Catch-all for other API errors
+  logger.error "API error: #{e.class} - #{e.message}"
+rescue OpenAI::Errors::Error => e
+  # Catch-all for SDK errors
+  logger.error "SDK error: #{e.message}"
+end
+```
+
+## Error Message Extraction
+
+The SDK automatically extracts error messages from the API response:
+
+```ruby
+# lib/openai/errors.rb:219
+message ||= OpenAI::Internal::Util.dig(body, :message) { {url: url.to_s, status: status, body: body} }
+```
+
+<Warning>
+  When debugging errors, inspect the `body` attribute for the full API response containing additional error details.
+</Warning>

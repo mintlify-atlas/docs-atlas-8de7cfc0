@@ -1,0 +1,308 @@
+---
+title: 'Function Calling and Tools'
+description: 'Learn how to use function calling and tools with chat completions in the OpenAI Ruby SDK'
+---
+
+## Overview
+
+Function calling allows chat models to call external functions and tools. This enables you to extend the model's capabilities with custom logic, API calls, database queries, and more.
+
+## Basic Function Calling
+
+Define a function using `OpenAI::BaseModel` and pass it to the `tools` parameter:
+
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+# typed: strong
+
+require_relative "../lib/openai"
+
+class GetWeather < OpenAI::BaseModel
+  required :location, String, doc: "City and country e.g. Bogotá, Colombia"
+end
+
+# gets API Key from environment variable `OPENAI_API_KEY`
+client = OpenAI::Client.new
+
+chat_completion = client.chat.completions.create(
+  model: "gpt-4o-2024-08-06",
+  messages: [
+    {
+      role: :user,
+      content: "What's the weather like in Paris today?"
+    }
+  ],
+  tools: [GetWeather]
+)
+
+chat_completion
+  .choices
+  .reject { _1.message.refusal }
+  .flat_map { _1.message.tool_calls.to_a }
+  .each do |tool_call|
+    case tool_call
+    when OpenAI::Chat::ChatCompletionMessageFunctionToolCall
+      # parsed is an instance of `GetWeather`
+      pp(tool_call.function.parsed)
+    else
+      puts("Unexpected tool call type: #{tool_call.type}")
+    end
+  end
+```
+
+## Defining Tools
+
+Tools are defined as classes that inherit from `OpenAI::BaseModel`:
+
+```ruby
+class GetWeather < OpenAI::BaseModel
+  required :location, String, doc: "City and country e.g. Bogotá, Colombia"
+end
+```
+
+### Multiple Parameters
+
+Define tools with multiple parameters and types:
+
+```ruby
+class SearchDatabase < OpenAI::BaseModel
+  required :query, String, doc: "The search query"
+  required :max_results, Integer, doc: "Maximum number of results to return"
+  required :include_archived, OpenAI::Boolean, doc: "Whether to include archived items"
+  required :filters, OpenAI::ArrayOf[String], nil?: true, doc: "Optional filter criteria"
+end
+```
+
+## Accessing Tool Calls
+
+Extract and process tool calls from the response:
+
+```ruby
+chat_completion
+  .choices
+  .reject { _1.message.refusal }
+  .flat_map { _1.message.tool_calls.to_a }
+  .each do |tool_call|
+    case tool_call
+    when OpenAI::Chat::ChatCompletionMessageFunctionToolCall
+      # Access the parsed arguments
+      args = tool_call.function.parsed
+      
+      # Execute your function with the parsed arguments
+      result = execute_weather_api(args.location)
+      
+      # Return the result to the model if needed
+      pp(result)
+    else
+      puts("Unexpected tool call type: #{tool_call.type}")
+    end
+  end
+```
+
+## Streaming Tool Calls
+
+You can stream tool calls in real-time to see arguments as they're generated:
+
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../../lib/openai"
+
+class GetWeather < OpenAI::BaseModel
+  required :location, String
+end
+
+# gets API Key from environment variable `OPENAI_API_KEY`
+client = OpenAI::Client.new
+
+stream = client.chat.completions.stream(
+  model: "gpt-4o-mini",
+  tools: [GetWeather],
+  messages: [
+    {role: :user, content: "Call get_weather with location San Francisco in JSON."}
+  ]
+)
+
+stream.each do |event|
+  case event
+  when OpenAI::Streaming::ChatFunctionToolCallArgumentsDeltaEvent
+    puts("delta: #{event.arguments_delta}")
+    pp(event.parsed)
+  when OpenAI::Streaming::ChatFunctionToolCallArgumentsDoneEvent
+    puts("--- Tool call finalized ---")
+    puts("name: #{event.name}")
+    puts("args: #{event.arguments}")
+    pp(event.parsed)
+  end
+end
+```
+
+## Stream Events for Tool Calls
+
+When streaming tool calls, you'll encounter these event types:
+
+### `ChatFunctionToolCallArgumentsDeltaEvent`
+
+Contains incremental argument data as it's generated:
+
+```ruby
+when OpenAI::Streaming::ChatFunctionToolCallArgumentsDeltaEvent
+  puts("delta: #{event.arguments_delta}")
+  pp(event.parsed)  # Partially parsed object
+```
+
+### `ChatFunctionToolCallArgumentsDoneEvent`
+
+Signals that the tool call is complete:
+
+```ruby
+when OpenAI::Streaming::ChatFunctionToolCallArgumentsDoneEvent
+  puts("name: #{event.name}")
+  puts("args: #{event.arguments}")
+  pp(event.parsed)  # Fully parsed object
+```
+
+## Multi-turn Conversations
+
+Implement multi-turn conversations by adding tool results back to the message history:
+
+<Steps>
+  <Step title="Initial request">
+    Send the user's message with available tools:
+    ```ruby
+    messages = [
+      {role: :user, content: "What's the weather in Tokyo?"}
+    ]
+    
+    response = client.chat.completions.create(
+      model: "gpt-4o-2024-08-06",
+      messages: messages,
+      tools: [GetWeather]
+    )
+    ```
+  </Step>
+  
+  <Step title="Process tool calls">
+    Execute the requested function:
+    ```ruby
+    tool_call = response.choices.first.message.tool_calls.first
+    args = tool_call.function.parsed
+    result = get_weather(args.location)
+    ```
+  </Step>
+  
+  <Step title="Add results to conversation">
+    Return the tool result to the model:
+    ```ruby
+    messages << response.choices.first.message.to_h
+    messages << {
+      role: :tool,
+      tool_call_id: tool_call.id,
+      content: result.to_json
+    }
+    ```
+  </Step>
+  
+  <Step title="Get final response">
+    Request the final answer:
+    ```ruby
+    final_response = client.chat.completions.create(
+      model: "gpt-4o-2024-08-06",
+      messages: messages
+    )
+    
+    puts final_response.choices.first.message.content
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+<Note>
+  **Always validate and sanitize tool arguments** before executing functions. Even with structured outputs, treat tool call arguments as untrusted input.
+</Note>
+
+<Steps>
+  <Step title="Use descriptive tool names">
+    Tool class names should clearly describe what the function does (e.g., `GetWeather`, not `Tool1`).
+  </Step>
+  
+  <Step title="Add comprehensive documentation">
+    Use the `doc` parameter to help the model understand when and how to use each parameter.
+  </Step>
+  
+  <Step title="Handle errors gracefully">
+    Implement error handling for tool execution and return meaningful error messages.
+  </Step>
+  
+  <Step title="Validate tool arguments">
+    Always validate parsed arguments before executing potentially dangerous operations.
+  </Step>
+</Steps>
+
+## Tool Choice Control
+
+Control when the model should use tools:
+
+<Tabs>
+  <Tab title="Auto (Default)">
+    Let the model decide whether to call a function:
+    ```ruby
+    client.chat.completions.create(
+      model: "gpt-4o-2024-08-06",
+      messages: messages,
+      tools: [GetWeather]
+      # tool_choice defaults to "auto"
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Required">
+    Force the model to call a function:
+    ```ruby
+    client.chat.completions.create(
+      model: "gpt-4o-2024-08-06",
+      messages: messages,
+      tools: [GetWeather],
+      tool_choice: "required"
+    )
+    ```
+  </Tab>
+  
+  <Tab title="Specific Tool">
+    Force the model to call a specific function:
+    ```ruby
+    client.chat.completions.create(
+      model: "gpt-4o-2024-08-06",
+      messages: messages,
+      tools: [GetWeather, GetForecast],
+      tool_choice: {type: "function", function: {name: "GetWeather"}}
+    )
+    ```
+  </Tab>
+  
+  <Tab title="None">
+    Prevent the model from calling any functions:
+    ```ruby
+    client.chat.completions.create(
+      model: "gpt-4o-2024-08-06",
+      messages: messages,
+      tools: [GetWeather],
+      tool_choice: "none"
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Structured Outputs" href="/examples/chat/structured-outputs">
+    Learn more about defining complex data structures with BaseModel
+  </Card>
+  <Card title="Streaming" href="/examples/chat/streaming">
+    Stream tool calls and arguments in real-time
+  </Card>
+</CardGroup>

@@ -1,0 +1,239 @@
+---
+title: Embeddings
+description: Create vector embeddings representing input text for semantic search, clustering, and recommendations
+---
+
+The Embeddings API creates vector representations of text that capture semantic meaning. Embeddings are useful for search, clustering, recommendations, anomaly detection, and classification tasks.
+
+## Create embeddings
+
+Creates an embedding vector representing the input text.
+
+```ruby
+client.embeddings.create(params)
+```
+
+<ParamField path="input" type="String | Array" required>
+  Input text to embed. Can be a string, array of strings, array of tokens, or array of token arrays. To embed multiple inputs in one request, pass an array of strings.
+</ParamField>
+
+<ParamField path="model" type="String" required>
+  ID of the model to use. Available models include `text-embedding-3-small`, `text-embedding-3-large`, and `text-embedding-ada-002`.
+</ParamField>
+
+<ParamField path="dimensions" type="Integer">
+  The number of dimensions the resulting output embeddings should have. Only supported in `text-embedding-3` and later models. Reducing dimensions can improve performance and reduce costs.
+</ParamField>
+
+<ParamField path="encoding_format" type="String" default="float">
+  The format to return the embeddings in. Can be either `float` or `base64`.
+</ParamField>
+
+<ParamField path="user" type="String">
+  A unique identifier representing your end-user, which can help OpenAI monitor and detect abuse.
+</ParamField>
+
+### Response
+
+Returns a `CreateEmbeddingResponse` object.
+
+<ResponseField name="object" type="String">
+  The object type, always `list`.
+</ResponseField>
+
+<ResponseField name="data" type="Array">
+  List of embedding objects.
+  
+  <Expandable title="Embedding object properties">
+    <ResponseField name="object" type="String">
+      The object type, always `embedding`.
+    </ResponseField>
+    
+    <ResponseField name="embedding" type="Array<Float>">
+      The embedding vector, which is a list of floats. The length depends on the model and dimensions parameter.
+    </ResponseField>
+    
+    <ResponseField name="index" type="Integer">
+      The index of the embedding in the list.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="model" type="String">
+  The model used to generate the embeddings.
+</ResponseField>
+
+<ResponseField name="usage" type="Object">
+  Token usage information.
+  
+  <Expandable title="Usage properties">
+    <ResponseField name="prompt_tokens" type="Integer">
+      Number of tokens in the input.
+    </ResponseField>
+    
+    <ResponseField name="total_tokens" type="Integer">
+      Total number of tokens used.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic embedding
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+response = client.embeddings.create(
+  model: "text-embedding-3-small",
+  input: "The quick brown fox jumps over the lazy dog"
+)
+
+embedding = response.data.first.embedding
+puts "Embedding dimensions: #{embedding.length}"
+puts "First 5 values: #{embedding.take(5)}"
+```
+
+### Batch embeddings
+
+Embed multiple texts in a single request:
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+texts = [
+  "Ruby is a dynamic programming language",
+  "Python is known for its simplicity",
+  "JavaScript runs in the browser"
+]
+
+response = client.embeddings.create(
+  model: "text-embedding-3-small",
+  input: texts
+)
+
+response.data.each_with_index do |embedding_obj, i|
+  puts "Text #{i + 1} embedding: #{embedding_obj.embedding.length} dimensions"
+end
+```
+
+### Custom dimensions
+
+Reduce embedding dimensions for better performance:
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+response = client.embeddings.create(
+  model: "text-embedding-3-large",
+  input: "Semantic search with embeddings",
+  dimensions: 256
+)
+
+embedding = response.data.first.embedding
+puts "Reduced to #{embedding.length} dimensions"
+```
+
+### Semantic search example
+
+```ruby
+require "openai"
+require "matrix"
+
+client = OpenAI::Client.new
+
+# Embed documents
+documents = [
+  "The capital of France is Paris",
+  "Ruby was created by Yukihiro Matsumoto",
+  "The Eiffel Tower is in Paris"
+]
+
+doc_response = client.embeddings.create(
+  model: "text-embedding-3-small",
+  input: documents
+)
+
+doc_embeddings = doc_response.data.map(&:embedding)
+
+# Embed query
+query = "Where is the Eiffel Tower?"
+query_response = client.embeddings.create(
+  model: "text-embedding-3-small",
+  input: query
+)
+
+query_embedding = query_response.data.first.embedding
+
+# Calculate cosine similarity
+def cosine_similarity(a, b)
+  dot_product = a.zip(b).map { |x, y| x * y }.sum
+  magnitude_a = Math.sqrt(a.map { |x| x**2 }.sum)
+  magnitude_b = Math.sqrt(b.map { |x| x**2 }.sum)
+  dot_product / (magnitude_a * magnitude_b)
+end
+
+# Find most similar document
+similarities = doc_embeddings.map do |doc_emb|
+  cosine_similarity(query_embedding, doc_emb)
+end
+
+best_match_idx = similarities.each_with_index.max_by { |sim, _| sim }[1]
+puts "Most similar document: #{documents[best_match_idx]}"
+puts "Similarity score: #{similarities[best_match_idx]}"
+```
+
+### Base64 encoding
+
+Get embeddings in base64 format:
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+response = client.embeddings.create(
+  model: "text-embedding-3-small",
+  input: "Encode this as base64",
+  encoding_format: :base64
+)
+
+encoded = response.data.first.embedding
+puts "Base64 encoded embedding: #{encoded[0..50]}..."
+```
+
+## Use cases
+
+### Semantic search
+Find the most relevant documents or content based on semantic similarity rather than keyword matching.
+
+### Clustering
+Group similar items together by clustering their embeddings using algorithms like k-means.
+
+### Recommendations
+Recommend items with similar embeddings to items a user has liked or interacted with.
+
+### Anomaly detection
+Identify outliers by finding embeddings that are far from typical patterns.
+
+### Classification
+Use embeddings as input features for machine learning classifiers.
+
+## Best practices
+
+- **Choose the right model**: `text-embedding-3-small` is faster and cheaper, while `text-embedding-3-large` provides better quality
+- **Batch requests**: Embed multiple texts in a single API call to reduce latency and costs
+- **Adjust dimensions**: For `text-embedding-3` models, you can reduce dimensions to improve performance
+- **Normalize for search**: When comparing embeddings, use cosine similarity as the distance metric
+- **Cache embeddings**: Store computed embeddings to avoid re-computing them for the same text
+
+## Related
+
+- [Embeddings guide](https://platform.openai.com/docs/guides/embeddings)
+- [Models documentation](https://platform.openai.com/docs/models/embeddings)

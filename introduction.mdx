@@ -1,0 +1,83 @@
+---
+title: Introduction
+description: The OpenAI Ruby library provides convenient access to the OpenAI REST API from any Ruby 3.2.0+ application
+---
+
+The OpenAI Ruby library provides convenient access to the OpenAI REST API from any Ruby 3.2.0+ application. It ships with comprehensive types and docstrings in Yard, RBS, and RBI for a fully type-safe development experience.
+
+<CardGroup cols={2}>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Install the gem using Bundler or directly with gem install
+  </Card>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Make your first API call in minutes
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/chat"
+  >
+    Explore all available methods and resources
+  </Card>
+  <Card
+    title="Examples"
+    icon="book"
+    href="/examples/chat/basic"
+  >
+    Browse real-world code examples
+  </Card>
+</CardGroup>
+
+## Key Features
+
+The OpenAI Ruby SDK is designed to make working with the OpenAI API seamless and intuitive:
+
+### Streaming Support
+
+Built-in support for streaming responses using Server-Sent Events (SSE), allowing you to process API responses in real-time as they're generated.
+
+### Auto-Pagination
+
+Automatic pagination for list methods with `auto_paging_each`, so you don't have to manually request successive pages of results.
+
+### Structured Outputs & Function Calling
+
+Powerful helpers with `OpenAI::BaseModel`, `OpenAI::ArrayOf`, `OpenAI::EnumOf`, and `OpenAI::UnionOf` to define JSON schemas for structured outputs and function calling.
+
+### File Upload Support
+
+Flexible file upload handling with support for `Pathname`, `StringIO`, raw file contents, and more.
+
+### Webhook Verification
+
+Built-in methods to verify webhook signatures and parse webhook payloads securely.
+
+### Error Handling
+
+Comprehensive error classes for all API status codes with automatic retries for transient failures.
+
+### Type Safety
+
+Full Sorbet, RBS, and RBI type definitions included for a completely type-safe development experience.
+
+### Concurrency & Connection Pooling
+
+Threadsafe client instances with built-in connection pooling using the `connection_pool` gem.
+
+## Requirements
+
+- Ruby 3.2.0 or higher
+- The standard library's `net/http` is used as the HTTP transport
+- Connection pooling via the `connection_pool` gem
+
+## Get Started
+
+Ready to build with OpenAI? Head over to the [Installation](/installation) guide to get set up, or jump straight to the [Quick Start](/quickstart) to make your first API call.

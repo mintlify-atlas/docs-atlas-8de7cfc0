@@ -1,0 +1,245 @@
+---
+title: Completions (Legacy)
+description: Create text completions using the legacy completions endpoint
+---
+
+The Completions API is a legacy endpoint for generating text completions. For new projects, we recommend using the [Chat Completions API](/api/chat) instead.
+
+<Note>
+  This is a legacy endpoint. We recommend using the Chat Completions API for new projects, which provides more capabilities and better performance.
+</Note>
+
+## Create a completion
+
+Creates a completion for the provided prompt and parameters.
+
+```ruby
+client.completions.create(params)
+```
+
+<ParamField path="model" type="String" required>
+  ID of the model to use. You can use the [List models](/api/models) API to see available models.
+</ParamField>
+
+<ParamField path="prompt" type="String | Array" required>
+  The prompt(s) to generate completions for, encoded as a string, array of strings, array of tokens, or array of token arrays.
+</ParamField>
+
+<ParamField path="max_tokens" type="Integer" default="16">
+  The maximum number of tokens that can be generated in the completion.
+</ParamField>
+
+<ParamField path="temperature" type="Float" default="1.0">
+  Sampling temperature between 0 and 2. Higher values make output more random, lower values make it more focused.
+</ParamField>
+
+<ParamField path="top_p" type="Float" default="1.0">
+  An alternative to sampling with temperature, called nucleus sampling. The model considers the results of the tokens with top_p probability mass.
+</ParamField>
+
+<ParamField path="n" type="Integer" default="1">
+  How many completions to generate for each prompt.
+</ParamField>
+
+<ParamField path="stream" type="Boolean" default="false">
+  Whether to stream back partial progress. For streaming, use `create_streaming` method instead.
+</ParamField>
+
+<ParamField path="logprobs" type="Integer">
+  Include the log probabilities on the `logprobs` most likely output tokens, as well the chosen tokens.
+</ParamField>
+
+<ParamField path="echo" type="Boolean" default="false">
+  Echo back the prompt in addition to the completion.
+</ParamField>
+
+<ParamField path="stop" type="String | Array<String>">
+  Up to 4 sequences where the API will stop generating further tokens.
+</ParamField>
+
+<ParamField path="presence_penalty" type="Float" default="0">
+  Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they appear in the text so far.
+</ParamField>
+
+<ParamField path="frequency_penalty" type="Float" default="0">
+  Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text.
+</ParamField>
+
+<ParamField path="best_of" type="Integer">
+  Generates `best_of` completions server-side and returns the "best" (the one with the highest log probability per token).
+</ParamField>
+
+<ParamField path="logit_bias" type="Hash">
+  Modify the likelihood of specified tokens appearing in the completion. Maps token IDs to bias values from -100 to 100.
+</ParamField>
+
+<ParamField path="suffix" type="String">
+  The suffix that comes after a completion of inserted text.
+</ParamField>
+
+<ParamField path="seed" type="Integer">
+  If specified, the system will make a best effort to sample deterministically for improved reproducibility.
+</ParamField>
+
+<ParamField path="user" type="String">
+  A unique identifier representing your end-user, which can help OpenAI monitor and detect abuse.
+</ParamField>
+
+### Response
+
+Returns a `Completion` object.
+
+<ResponseField name="id" type="String">
+  Unique identifier for the completion.
+</ResponseField>
+
+<ResponseField name="object" type="String">
+  The object type, always `text_completion`.
+</ResponseField>
+
+<ResponseField name="created" type="Integer">
+  Unix timestamp of when the completion was created.
+</ResponseField>
+
+<ResponseField name="model" type="String">
+  The model used for completion.
+</ResponseField>
+
+<ResponseField name="choices" type="Array">
+  A list of completion choices.
+  
+  <Expandable title="Choice properties">
+    <ResponseField name="text" type="String">
+      The generated completion text.
+    </ResponseField>
+    
+    <ResponseField name="index" type="Integer">
+      The index of the choice in the list.
+    </ResponseField>
+    
+    <ResponseField name="logprobs" type="Object">
+      Log probability information for the choice.
+    </ResponseField>
+    
+    <ResponseField name="finish_reason" type="String">
+      The reason the model stopped: `stop`, `length`, or `content_filter`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="usage" type="Object">
+  Token usage statistics.
+  
+  <Expandable title="Usage properties">
+    <ResponseField name="prompt_tokens" type="Integer">
+      Number of tokens in the prompt.
+    </ResponseField>
+    
+    <ResponseField name="completion_tokens" type="Integer">
+      Number of tokens in the generated completion.
+    </ResponseField>
+    
+    <ResponseField name="total_tokens" type="Integer">
+      Total tokens used in the request.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic completion
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+completion = client.completions.create(
+  model: "gpt-3.5-turbo-instruct",
+  prompt: "Once upon a time",
+  max_tokens: 100,
+  temperature: 0.7
+)
+
+puts completion.choices.first.text
+```
+
+### Streaming completion
+
+Use `create_streaming` for Server-Sent Events streaming:
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+stream = client.completions.create_streaming(
+  model: "gpt-3.5-turbo-instruct",
+  prompt: "Write a short poem about Ruby:",
+  max_tokens: 100
+)
+
+stream.each do |chunk|
+  print chunk.choices.first&.text
+end
+puts
+```
+
+### Multiple completions
+
+```ruby
+completion = client.completions.create(
+  model: "gpt-3.5-turbo-instruct",
+  prompt: "Suggest a creative project name:",
+  n: 3,
+  max_tokens: 10
+)
+
+completion.choices.each do |choice|
+  puts "Option #{choice.index + 1}: #{choice.text}"
+end
+```
+
+### With stop sequences
+
+```ruby
+completion = client.completions.create(
+  model: "gpt-3.5-turbo-instruct",
+  prompt: "List of programming languages:\n1.",
+  stop: ["\n\n", "10."],
+  max_tokens: 100
+)
+
+puts completion.choices.first.text
+```
+
+## Migration to Chat Completions
+
+For new projects, we recommend using the Chat Completions API. Here's how to migrate:
+
+<CodeGroup>
+```ruby Completions (Legacy)
+completion = client.completions.create(
+  model: "gpt-3.5-turbo-instruct",
+  prompt: "Say this is a test"
+)
+
+puts completion.choices.first.text
+```
+
+```ruby Chat Completions (Recommended)
+completion = client.chat.completions.create(
+  model: "gpt-4",
+  messages: [
+    {role: "user", content: "Say this is a test"}
+  ]
+)
+
+puts completion.choices.first.message.content
+```
+</CodeGroup>
+
+## Related
+
+- [Chat Completions API](/api/chat)
+- [Models API](/api/models)

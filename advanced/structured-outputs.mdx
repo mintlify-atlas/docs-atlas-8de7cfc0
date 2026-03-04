@@ -1,0 +1,342 @@
+---
+title: Structured Outputs
+description: Define JSON schemas using BaseModel, ArrayOf, EnumOf, and UnionOf helpers for structured responses
+---
+
+The OpenAI Ruby SDK provides helper classes to define JSON schemas for [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) and function calling. These helpers make it easy to create type-safe, validated responses from the API.
+
+## BaseModel
+
+Use `OpenAI::BaseModel` to define structured response schemas:
+
+```ruby
+require "openai"
+
+class Participant < OpenAI::BaseModel
+  required :first_name, String
+  required :last_name, String, nil?: true
+  required :status, OpenAI::EnumOf[:confirmed, :unconfirmed, :tentative]
+end
+
+class CalendarEvent < OpenAI::BaseModel
+  required :name, String
+  required :date, String
+  required :participants, OpenAI::ArrayOf[Participant]
+end
+```
+
+### Field Options
+
+<Tabs>
+  <Tab title="Required Fields">
+    ```ruby
+    class Location < OpenAI::BaseModel
+      # Basic required field
+      required :address, String
+
+      # With documentation
+      required :city, String, doc: "City name"
+
+      # Nullable field
+      required :postal_code, String, nil?: true
+    end
+    ```
+  </Tab>
+
+  <Tab title="Complex Types">
+    ```ruby
+    class CalendarEvent < OpenAI::BaseModel
+      # Array of objects
+      required :participants, OpenAI::ArrayOf[Participant]
+
+      # Boolean field
+      required :is_virtual, OpenAI::Boolean
+
+      # Union types
+      required :location,
+               OpenAI::UnionOf[String, Location],
+               nil?: true,
+               doc: "Event location"
+    end
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+The `optional` method is not supported for structured output APIs. Use `required` with `nil?: true` instead.
+</Warning>
+
+## ArrayOf
+
+Define array types with optional documentation:
+
+```ruby
+class CalendarEvent < OpenAI::BaseModel
+  # Array of Participant objects
+  required :participants, OpenAI::ArrayOf[Participant]
+
+  # Array with documentation
+  required :optional_participants,
+           OpenAI::ArrayOf[Participant, doc: "who might not show up"],
+           nil?: true
+end
+```
+
+### ArrayOf Examples
+
+<CodeGroup>
+```ruby Primitive Arrays
+class Schedule < OpenAI::BaseModel
+  # Array of strings
+  required :days, OpenAI::ArrayOf[String]
+
+  # Array of integers
+  required :hours, OpenAI::ArrayOf[Integer]
+end
+```
+
+```ruby Nested Arrays
+class Matrix < OpenAI::BaseModel
+  # 2D array
+  required :grid, OpenAI::ArrayOf[OpenAI::ArrayOf[Integer]]
+end
+```
+</CodeGroup>
+
+## EnumOf
+
+Define enumerated types with fixed values:
+
+```ruby
+class Participant < OpenAI::BaseModel
+  # Symbol enum
+  required :status, OpenAI::EnumOf[:confirmed, :unconfirmed, :tentative]
+end
+
+class Product < OpenAI::BaseModel
+  # Integer enum
+  required :priority, OpenAI::EnumOf[1, 2, 3, 4, 5]
+end
+```
+
+### Supported Enum Types
+
+- **Symbols**: `:confirmed`, `:pending`, `:cancelled`
+- **Integers**: `1`, `2`, `3`
+- **Floats**: `1.0`, `2.5`, `3.0`
+- **Booleans**: `true`, `false`
+- **Null**: `nil`
+
+## UnionOf
+
+Define fields that can be one of multiple types:
+
+```ruby
+class CalendarEvent < OpenAI::BaseModel
+  # Location can be either a String or a Location object
+  required :location, OpenAI::UnionOf[String, Location], nil?: true
+end
+
+class Response < OpenAI::BaseModel
+  # Value can be string, integer, or array of strings
+  required :value, OpenAI::UnionOf[String, Integer, OpenAI::ArrayOf[String]]
+end
+```
+
+## Complete Example
+
+Here's a full example showing how to define and use structured outputs:
+
+```ruby
+require "openai"
+
+# Define the schema
+class Location < OpenAI::BaseModel
+  required :address, String
+  required :city, String, doc: "City name"
+  required :postal_code, String, nil?: true
+end
+
+class Participant < OpenAI::BaseModel
+  required :first_name, String
+  required :last_name, String, nil?: true
+  required :status, OpenAI::EnumOf[:confirmed, :unconfirmed, :tentative]
+end
+
+class CalendarEvent < OpenAI::BaseModel
+  required :name, String
+  required :date, String
+  required :participants, OpenAI::ArrayOf[Participant]
+  required :optional_participants,
+           OpenAI::ArrayOf[Participant, doc: "who might not show up"],
+           nil?: true
+  required :is_virtual, OpenAI::Boolean
+  required :location,
+           OpenAI::UnionOf[String, Location],
+           nil?: true,
+           doc: "Event location"
+end
+
+# Use with Responses API
+client = OpenAI::Client.new
+
+response = client.responses.create(
+  model: "gpt-4o-2024-08-06",
+  input: [
+    {role: :system, content: "Extract the event information."},
+    {
+      role: :user,
+      content: <<~CONTENT
+        Alice Shah and Lena are going to a science fair on Friday at 123 Main St. in San Diego.
+        They have also invited Jasper Vellani and Talia Groves - Jasper has not responded and Talia said she is thinking about it.
+      CONTENT
+    }
+  ],
+  text: CalendarEvent
+)
+
+response
+  .output
+  .flat_map { _1.content }
+  .grep_v(OpenAI::Models::Responses::ResponseOutputRefusal)
+  .each do |content|
+    # parsed is an instance of CalendarEvent
+    pp(content.parsed)
+  end
+```
+
+## Usage with Chat Completions
+
+You can also use structured outputs with the Chat Completions API:
+
+```ruby
+chat_completion = client.chat.completions.create(
+  model: "gpt-4o-2024-08-06",
+  messages: [
+    {role: :system, content: "Extract the event information."},
+    {
+      role: :user,
+      content: "Alice and Bob are meeting on Friday."
+    }
+  ],
+  response_format: CalendarEvent
+)
+
+chat_completion
+  .choices
+  .reject { _1.message.refusal }
+  .each do |choice|
+    # parsed is an instance of CalendarEvent
+    pp(choice.message.parsed)
+  end
+```
+
+## Function Calling
+
+Use `BaseModel` to define function schemas:
+
+```ruby
+class GetWeather < OpenAI::BaseModel
+  required :location, String, doc: "City and country e.g. Bogotá, Colombia"
+end
+
+client = OpenAI::Client.new
+
+response = client.responses.create(
+  model: "gpt-4o-2024-08-06",
+  input: [
+    {
+      role: :user,
+      content: "What's the weather like in Paris today?"
+    }
+  ],
+  tools: [GetWeather]
+)
+
+response
+  .output
+  .each do |output|
+    # parsed is an instance of GetWeather
+    pp(output.parsed)
+  end
+```
+
+## Raw JSON Schema Equivalent
+
+The helpers automatically generate JSON schemas. This `CalendarEvent` class:
+
+```ruby
+class CalendarEvent < OpenAI::BaseModel
+  required :name, String
+  required :date, String
+  required :participants, OpenAI::ArrayOf[Participant]
+end
+```
+
+Is equivalent to this raw JSON schema:
+
+```ruby
+response = client.responses.create(
+  model: "gpt-4o-2024-08-06",
+  input: [...],
+  text: {
+    format: {
+      type: :json_schema,
+      name: "CalendarEvent",
+      strict: true,
+      schema: {
+        type: "object",
+        properties: {
+          name: {type: "string"},
+          date: {type: "string"},
+          participants: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                first_name: {type: "string"},
+                last_name: {type: %w[string null]},
+                status: {type: "string", enum: %w[confirmed unconfirmed tentative]}
+              },
+              required: %w[first_name last_name status],
+              additionalProperties: false
+            }
+          }
+        },
+        required: %w[name date participants],
+        additionalProperties: false
+      }
+    }
+  }
+)
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use descriptive class names">
+    Name your `BaseModel` classes clearly to indicate what they represent (e.g., `CalendarEvent`, `UserProfile`).
+  </Step>
+
+  <Step title="Add documentation to fields">
+    Use the `doc:` parameter to provide context for the AI model about what each field represents.
+  </Step>
+
+  <Step title="Prefer nil?: true over optional">
+    For structured outputs, always use `required` with `nil?: true` for optional fields instead of the `optional` method.
+  </Step>
+
+  <Step title="Handle refusals">
+    Always check for and filter out refusal responses when processing structured outputs.
+  </Step>
+</Steps>
+
+## Type Helpers Reference
+
+| Helper | Purpose | Example |
+|--------|---------|----------|
+| `BaseModel` | Define object schemas | `class User < OpenAI::BaseModel` |
+| `ArrayOf` | Define array types | `OpenAI::ArrayOf[String]` |
+| `EnumOf` | Define enumerated values | `OpenAI::EnumOf[:pending, :complete]` |
+| `UnionOf` | Define union types | `OpenAI::UnionOf[String, Integer]` |
+| `Boolean` | Boolean type | `OpenAI::Boolean` |

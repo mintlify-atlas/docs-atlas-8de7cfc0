@@ -1,0 +1,183 @@
+---
+title: 'Authentication'
+description: 'Configure API keys and organization headers for the OpenAI API'
+---
+
+## API Key Authentication
+
+All requests to the OpenAI API require authentication using an API key. The Ruby SDK handles this automatically through the client configuration.
+
+### Setting Your API Key
+
+<Steps>
+  <Step title="Get your API key">
+    Obtain your API key from the [OpenAI Platform](https://platform.openai.com/api-keys).
+  </Step>
+  
+  <Step title="Configure the client">
+    Pass your API key when creating the client:
+    
+    ```ruby
+    client = OpenAI::Client.new(api_key: 'sk-...')
+    ```
+    
+    Or set it as an environment variable:
+    
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+    
+    ```ruby
+    client = OpenAI::Client.new  # Uses ENV["OPENAI_API_KEY"]
+    ```
+  </Step>
+</Steps>
+
+### How Authentication Works
+
+The SDK automatically includes your API key in the `Authorization` header of every request:
+
+```ruby
+# lib/openai/client.rb:99-103
+private def auth_headers
+  return {} if @api_key.nil?
+
+  {"authorization" => "Bearer #{@api_key}"}
+end
+```
+
+<Warning>
+  Never hardcode API keys in your source code. Use environment variables or a secure configuration management system.
+</Warning>
+
+## Organization Header
+
+For users with multiple organizations, you can specify which organization to use for API requests.
+
+### Configuring Organization ID
+
+```ruby
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  organization: 'org-abc123'
+)
+```
+
+Or via environment variable:
+
+```bash
+export OPENAI_ORG_ID="org-abc123"
+```
+
+### How It Works
+
+The organization ID is sent in the `openai-organization` header:
+
+```ruby
+# lib/openai/client.rb:142-145
+headers = {
+  "openai-organization" => (@organization = organization&.to_s),
+  "openai-project" => (@project = project&.to_s)
+}
+```
+
+## Project Header
+
+Projects allow you to organize your API usage and manage resources within an organization.
+
+### Configuring Project ID
+
+```ruby
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  project: 'proj_abc123'
+)
+```
+
+Or via environment variable:
+
+```bash
+export OPENAI_PROJECT_ID="proj_abc123"
+```
+
+### How It Works
+
+The project ID is sent in the `openai-project` header on all requests, scoping your API calls to the specified project.
+
+## Complete Configuration Example
+
+<CodeGroup>
+
+```ruby Environment Variables (Recommended)
+# Set in your shell or .env file
+export OPENAI_API_KEY="sk-..."
+export OPENAI_ORG_ID="org-abc123"
+export OPENAI_PROJECT_ID="proj_xyz789"
+
+# In your application
+require 'openai'
+
+client = OpenAI::Client.new
+```
+
+```ruby Direct Parameters
+require 'openai'
+
+client = OpenAI::Client.new(
+  api_key: 'sk-...',
+  organization: 'org-abc123',
+  project: 'proj_xyz789'
+)
+```
+
+```ruby Multiple Clients
+require 'openai'
+
+# Production organization
+prod_client = OpenAI::Client.new(
+  api_key: ENV['OPENAI_PROD_KEY'],
+  organization: 'org-prod',
+  project: 'proj-main'
+)
+
+# Development organization
+dev_client = OpenAI::Client.new(
+  api_key: ENV['OPENAI_DEV_KEY'],
+  organization: 'org-dev',
+  project: 'proj-test'
+)
+```
+
+</CodeGroup>
+
+## Security Best Practices
+
+<Note>
+  Follow these guidelines to keep your API keys secure:
+</Note>
+
+- **Never commit API keys to version control** - Use `.gitignore` to exclude configuration files
+- **Use environment variables** - Store sensitive credentials outside your codebase
+- **Rotate keys regularly** - Generate new API keys periodically
+- **Use project-scoped keys** - Limit key permissions to specific projects when possible
+- **Monitor usage** - Track API usage in the OpenAI dashboard to detect unauthorized access
+
+## Missing API Key Error
+
+If no API key is provided, the client will raise an error:
+
+```ruby
+# lib/openai/client.rb:138-140
+if api_key.nil?
+  raise ArgumentError.new("api_key is required, and can be set via environ: \"OPENAI_API_KEY\"")
+end
+```
+
+**Error message:**
+```
+ArgumentError: api_key is required, and can be set via environ: "OPENAI_API_KEY"
+```
+
+<Warning>
+  Ensure your API key is set before attempting to make API requests.
+</Warning>

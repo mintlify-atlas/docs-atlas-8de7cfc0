@@ -1,0 +1,232 @@
+---
+title: Pagination
+description: Automatically iterate through paginated API responses with auto_paging_each and manual page controls
+---
+
+List methods in the OpenAI API are paginated to handle large result sets efficiently. The Ruby SDK provides both automatic and manual pagination utilities.
+
+## Automatic Pagination
+
+The `auto_paging_each` method automatically fetches successive pages as you iterate:
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+page = client.fine_tuning.jobs.list(limit: 20)
+
+# Automatically fetches more pages as needed
+page.auto_paging_each do |job|
+  puts(job.id)
+end
+```
+
+<Note>
+The `auto_paging_each` method handles all pagination logic internally, fetching new pages as needed until all results have been processed.
+</Note>
+
+## Accessing Single Page Data
+
+You can access items from a single page without triggering automatic pagination:
+
+```ruby
+page = client.fine_tuning.jobs.list(limit: 20)
+
+# Fetch a single item from the current page
+job = page.data[0]
+puts(job.id)
+
+# Access all items on the current page
+page.data.each do |job|
+  puts(job.id)
+end
+```
+
+## Manual Pagination
+
+For more granular control, use `next_page?` and `next_page` methods:
+
+### Check for Next Page
+
+```ruby
+page = client.fine_tuning.jobs.list(limit: 20)
+
+if page.next_page?
+  new_page = page.next_page
+  puts(new_page.data[0].id)
+end
+```
+
+### Iterate Through Pages Manually
+
+```ruby
+page = client.fine_tuning.jobs.list(limit: 20)
+
+loop do
+  # Process current page
+  page.data.each do |job|
+    puts(job.id)
+  end
+
+  # Check if there's a next page
+  break unless page.next_page?
+
+  # Fetch next page
+  page = page.next_page
+end
+```
+
+## Comparison: Automatic vs Manual
+
+<Tabs>
+  <Tab title="Automatic Pagination">
+    ```ruby
+    # Simple and concise - recommended for most use cases
+    page = client.fine_tuning.jobs.list(limit: 20)
+
+    page.auto_paging_each do |job|
+      puts(job.id)
+    end
+    ```
+
+    **Use when:**
+    - You need to process all items
+    - You want simple, readable code
+    - You don't need page-level metadata
+  </Tab>
+
+  <Tab title="Manual Pagination">
+    ```ruby
+    # More control - useful for advanced scenarios
+    page = client.fine_tuning.jobs.list(limit: 20)
+
+    loop do
+      page.data.each do |job|
+        puts(job.id)
+      end
+
+      break unless page.next_page?
+      page = page.next_page
+    end
+    ```
+
+    **Use when:**
+    - You need to inspect page metadata
+    - You want to implement custom pagination logic
+    - You need to pause/resume pagination
+  </Tab>
+</Tabs>
+
+## Controlling Page Size
+
+Set the `limit` parameter to control how many items are returned per page:
+
+```ruby
+# Fetch 10 items per page
+page = client.fine_tuning.jobs.list(limit: 10)
+
+# Fetch 100 items per page
+page = client.fine_tuning.jobs.list(limit: 100)
+```
+
+<Note>
+The API may have maximum limit values. Check the specific endpoint documentation for limits.
+</Note>
+
+## Paginated Resources
+
+Pagination is available on various list endpoints:
+
+<CodeGroup>
+```ruby Fine-tuning Jobs
+page = client.fine_tuning.jobs.list(limit: 20)
+page.auto_paging_each do |job|
+  puts(job.id)
+end
+```
+
+```ruby Files
+page = client.files.list(limit: 20)
+page.auto_paging_each do |file|
+  puts(file.id)
+end
+```
+
+```ruby Vector Store Files
+page = client.vector_stores.files.list(
+  vector_store_id: "vs_abc123",
+  limit: 20
+)
+page.auto_paging_each do |file|
+  puts(file.id)
+end
+```
+</CodeGroup>
+
+## Best Practices
+
+<Steps>
+  <Step title="Use auto_paging_each by default">
+    For most use cases, `auto_paging_each` provides the simplest and most readable approach to handling paginated data.
+  </Step>
+
+  <Step title="Set appropriate page limits">
+    Balance between API call overhead and memory usage by choosing an appropriate `limit` value for your use case.
+  </Step>
+
+  <Step title="Handle rate limits gracefully">
+    When processing large paginated datasets, be mindful of rate limits. The SDK automatically retries on rate limit errors.
+  </Step>
+
+  <Step title="Use manual pagination for complex workflows">
+    When you need to implement custom logic between pages or access page metadata, use the `next_page?` and `next_page` methods.
+  </Step>
+</Steps>
+
+## Common Patterns
+
+### Collecting All Items
+
+```ruby
+page = client.fine_tuning.jobs.list(limit: 20)
+
+all_jobs = []
+page.auto_paging_each do |job|
+  all_jobs << job
+end
+
+puts "Total jobs: #{all_jobs.count}"
+```
+
+### Early Termination
+
+```ruby
+page = client.fine_tuning.jobs.list(limit: 20)
+
+page.auto_paging_each do |job|
+  puts(job.id)
+
+  # Stop after finding what you need
+  break if job.status == "succeeded"
+end
+```
+
+### Processing with Progress
+
+```ruby
+page = client.fine_tuning.jobs.list(limit: 20)
+count = 0
+
+loop do
+  page.data.each do |job|
+    count += 1
+    puts "Processing job #{count}: #{job.id}"
+  end
+
+  break unless page.next_page?
+
+  puts "Fetching next page..."
+  page = page.next_page
+end
+```

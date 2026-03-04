@@ -1,0 +1,280 @@
+---
+title: Models
+description: List and retrieve information about available models in your OpenAI organization
+---
+
+The Models API allows you to list available models and retrieve detailed information about specific models.
+
+## List models
+
+Lists the currently available models and provides basic information about each one such as the owner and availability.
+
+```ruby
+client.models.list
+```
+
+### Response
+
+Returns a paginated list of `Model` objects.
+
+<ResponseField name="object" type="String">
+  The object type, always `list`.
+</ResponseField>
+
+<ResponseField name="data" type="Array">
+  List of model objects.
+  
+  <Expandable title="Model object properties">
+    <ResponseField name="id" type="String">
+      The model identifier, which can be referenced in API endpoints.
+    </ResponseField>
+    
+    <ResponseField name="object" type="String">
+      The object type, always `model`.
+    </ResponseField>
+    
+    <ResponseField name="created" type="Integer">
+      Unix timestamp of when the model was created.
+    </ResponseField>
+    
+    <ResponseField name="owned_by" type="String">
+      The organization that owns the model.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Examples
+
+#### List all models
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+models = client.models.list
+
+models.data.each do |model|
+  puts "#{model.id} (owned by: #{model.owned_by})"
+end
+```
+
+#### Filter models
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+models = client.models.list
+
+# Find GPT-4 models
+gpt4_models = models.data.select { |m| m.id.include?("gpt-4") }
+
+gpt4_models.each do |model|
+  puts model.id
+end
+```
+
+## Retrieve a model
+
+Retrieves a model instance, providing basic information about the model such as the owner and permissioning.
+
+```ruby
+client.models.retrieve(model)
+```
+
+<ParamField path="model" type="String" required>
+  The ID of the model to use for this request (e.g., `gpt-4`, `gpt-3.5-turbo`).
+</ParamField>
+
+### Response
+
+Returns a `Model` object.
+
+<ResponseField name="id" type="String">
+  The model identifier.
+</ResponseField>
+
+<ResponseField name="object" type="String">
+  The object type, always `model`.
+</ResponseField>
+
+<ResponseField name="created" type="Integer">
+  Unix timestamp of when the model was created.
+</ResponseField>
+
+<ResponseField name="owned_by" type="String">
+  The organization that owns the model.
+</ResponseField>
+
+### Examples
+
+#### Retrieve model details
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+model = client.models.retrieve("gpt-4")
+
+puts "Model ID: #{model.id}"
+puts "Owned by: #{model.owned_by}"
+puts "Created: #{Time.at(model.created)}"
+```
+
+#### Check model availability
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+def model_available?(client, model_id)
+  client.models.retrieve(model_id)
+  true
+rescue => e
+  puts "Model not available: #{e.message}"
+  false
+end
+
+if model_available?(client, "gpt-4-turbo")
+  puts "GPT-4 Turbo is available!"
+end
+```
+
+## Delete a fine-tuned model
+
+Delete a fine-tuned model. You must have the Owner role in your organization to delete a model.
+
+```ruby
+client.models.delete(model)
+```
+
+<ParamField path="model" type="String" required>
+  The model to delete. Must be a fine-tuned model that you own.
+</ParamField>
+
+### Response
+
+Returns a `ModelDeleted` object.
+
+<ResponseField name="id" type="String">
+  The ID of the deleted model.
+</ResponseField>
+
+<ResponseField name="object" type="String">
+  The object type, always `model`.
+</ResponseField>
+
+<ResponseField name="deleted" type="Boolean">
+  Whether the model was successfully deleted.
+</ResponseField>
+
+### Examples
+
+#### Delete a fine-tuned model
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+# Delete a fine-tuned model
+result = client.models.delete("ft:gpt-3.5-turbo:my-org:custom-model:id")
+
+if result.deleted
+  puts "Model #{result.id} deleted successfully"
+else
+  puts "Failed to delete model"
+end
+```
+
+## Model types
+
+OpenAI offers various types of models for different use cases:
+
+### Chat models
+- **GPT-4 series**: Most capable models for complex tasks
+  - `gpt-4`, `gpt-4-turbo`, `gpt-4o`, `gpt-4o-mini`
+- **GPT-3.5 series**: Fast and cost-effective
+  - `gpt-3.5-turbo`
+- **Reasoning models**: Advanced reasoning capabilities
+  - `o3`, `o4-mini`, `o1`, `o1-mini`
+
+### Embedding models
+- `text-embedding-3-small`: Fast and efficient
+- `text-embedding-3-large`: Highest quality
+- `text-embedding-ada-002`: Legacy model
+
+### Image models
+- **DALL-E**: Image generation
+  - `dall-e-2`, `dall-e-3`
+- **GPT Image**: Advanced image generation and editing
+  - `gpt-image-1.5`, `gpt-image-1`, `gpt-image-1-mini`
+
+### Audio models
+- **TTS**: Text-to-speech
+  - `tts-1`, `tts-1-hd`
+- **Whisper**: Speech-to-text
+  - `whisper-1`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`
+
+### Completions (Legacy)
+- `gpt-3.5-turbo-instruct`
+
+## Model capabilities
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+# Get all available models
+models = client.models.list
+
+# Group by capability
+text_models = models.data.select { |m| m.id.include?("gpt") }
+embedding_models = models.data.select { |m| m.id.include?("embedding") }
+image_models = models.data.select { |m| m.id.include?("dall-e") || m.id.include?("image") }
+audio_models = models.data.select { |m| m.id.include?("tts") || m.id.include?("whisper") }
+
+puts "Text models: #{text_models.map(&:id).join(', ')}"
+puts "Embedding models: #{embedding_models.map(&:id).join(', ')}"
+puts "Image models: #{image_models.map(&:id).join(', ')}"
+puts "Audio models: #{audio_models.map(&:id).join(', ')}"
+```
+
+## Pagination
+
+The list endpoint returns a `Page` object that can be iterated:
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+# Iterate through all models
+page = client.models.list
+
+page.data.each do |model|
+  puts model.id
+end
+
+# The Page object contains all models
+puts "Total models: #{page.data.length}"
+```
+
+## Best practices
+
+- **Check availability**: Before using a model, verify it's available in your organization
+- **Use appropriate models**: Choose models based on your use case (speed vs. capability)
+- **Monitor usage**: Keep track of which models you're using for billing purposes
+- **Fine-tuned models**: Only delete fine-tuned models you're certain you won't need
+- **Stay updated**: New models are regularly released; check the list periodically
+
+## Related
+
+- [Models documentation](https://platform.openai.com/docs/models)
+- [Model pricing](https://openai.com/pricing)
+- [Fine-tuning API](/api/fine-tuning)

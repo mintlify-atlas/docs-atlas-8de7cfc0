@@ -1,122 +1,130 @@
 {
   "$schema": "https://mintlify.com/docs.json",
+  "name": "OpenAI Ruby SDK",
   "theme": "mint",
-  "name": "Mint Starter Kit",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#10A37F",
+    "light": "#1A7F64",
+    "dark": "#0D8A6F"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/openai/openai-ruby"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/openai/openai-ruby"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "core/client",
+              "core/authentication",
+              "core/error-handling",
+              "core/retries",
+              "core/timeouts"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Advanced Features",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "advanced/streaming",
+              "advanced/pagination",
+              "advanced/file-uploads",
+              "advanced/structured-outputs",
+              "advanced/webhooks",
+              "advanced/concurrency"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Type Safety",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "types/sorbet",
+              "types/rbs",
+              "types/base-model"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Resources",
             "pages": [
-              "api-reference/introduction"
+              "api/chat",
+              "api/completions",
+              "api/embeddings",
+              "api/audio",
+              "api/images",
+              "api/models",
+              "api/files",
+              "api/fine-tuning",
+              "api/moderations",
+              "api/batches",
+              "api/vector-stores",
+              "api/assistants",
+              "api/responses",
+              "api/realtime",
+              "api/conversations"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Client",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/client/initialization",
+              "api/client/configuration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Chat Completions",
+            "pages": [
+              "examples/chat/basic",
+              "examples/chat/streaming",
+              "examples/chat/structured-outputs",
+              "examples/chat/tools"
+            ]
+          },
+          {
+            "group": "Responses API",
+            "pages": [
+              "examples/responses/basic",
+              "examples/responses/streaming",
+              "examples/responses/structured-outputs"
+            ]
+          },
+          {
+            "group": "Other Examples",
+            "pages": [
+              "examples/image-generation",
+              "examples/audio-transcription",
+              "examples/embeddings",
+              "examples/fine-tuning"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

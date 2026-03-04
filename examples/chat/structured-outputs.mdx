@@ -1,0 +1,253 @@
+---
+title: 'Structured Outputs'
+description: 'Learn how to get type-safe, structured data from chat completions using the OpenAI Ruby SDK'
+---
+
+## Overview
+
+Structured outputs allow you to define schemas for chat completions and receive parsed, type-safe responses. This is perfect for extracting structured data, building forms, or ensuring consistent response formats.
+
+## Defining Models
+
+Use `OpenAI::BaseModel` to define your response structure:
+
+```ruby
+class Location < OpenAI::BaseModel
+  required :address, String
+  required :city, String, doc: "City name"
+  required :postal_code, String, nil?: true
+end
+
+class Participant < OpenAI::BaseModel
+  required :first_name, String
+  required :last_name, String, nil?: true
+  required :status, OpenAI::EnumOf[:confirmed, :unconfirmed, :tentative]
+end
+
+class CalendarEvent < OpenAI::BaseModel
+  required :name, String
+  required :date, String
+  required :participants, OpenAI::ArrayOf[Participant]
+  required :optional_participants, OpenAI::ArrayOf[Participant, doc: "who might not show up"], nil?: true
+  required :is_virtual, OpenAI::Boolean
+  required :location,
+           OpenAI::UnionOf[String, Location],
+           nil?: true,
+           doc: "Event location"
+end
+```
+
+## Complete Example
+
+Here's a full example of using structured outputs to extract calendar event information:
+
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+# typed: strong
+
+require_relative "../lib/openai"
+
+class Location < OpenAI::BaseModel
+  required :address, String
+  required :city, String, doc: "City name"
+  required :postal_code, String, nil?: true
+end
+
+# Participant model with an optional last_name and an enum for status
+class Participant < OpenAI::BaseModel
+  required :first_name, String
+  required :last_name, String, nil?: true
+  required :status, OpenAI::EnumOf[:confirmed, :unconfirmed, :tentative]
+end
+
+# CalendarEvent model with a list of participants.
+class CalendarEvent < OpenAI::BaseModel
+  required :name, String
+  required :date, String
+  required :participants, OpenAI::ArrayOf[Participant]
+  required :optional_participants, OpenAI::ArrayOf[Participant, doc: "who might not show up"], nil?: true
+  required :is_virtual, OpenAI::Boolean
+  required :location,
+           OpenAI::UnionOf[String, Location],
+           nil?: true,
+           doc: "Event location"
+end
+
+# gets API Key from environment variable `OPENAI_API_KEY`
+client = OpenAI::Client.new
+
+chat_completion = client.chat.completions.create(
+  model: "gpt-4o-2024-08-06",
+  messages: [
+    {role: :system, content: "Extract the event information."},
+    {
+      role: :user,
+      content: <<~CONTENT
+        Alice Shah and Lena are going to a science fair on Friday at 123 Main St. in San Diego.
+        They have also invited Jasper Vellani and Talia Groves - Jasper has not responded and Talia said she is thinking about it.
+      CONTENT
+    }
+  ],
+  response_format: CalendarEvent
+)
+
+chat_completion
+  .choices
+  .reject { _1.message.refusal }
+  .each do |choice|
+    # parsed is an instance of `CalendarEvent`
+    pp(choice.message.parsed)
+  end
+```
+
+## Model Features
+
+### Type Safety
+
+<Tabs>
+  <Tab title="Basic Types">
+    Support for standard Ruby types:
+    ```ruby
+    class User < OpenAI::BaseModel
+      required :name, String
+      required :age, Integer
+      required :active, OpenAI::Boolean
+    end
+    ```
+  </Tab>
+  
+  <Tab title="Arrays">
+    Type-safe arrays with `ArrayOf`:
+    ```ruby
+    class Team < OpenAI::BaseModel
+      required :members, OpenAI::ArrayOf[Participant]
+    end
+    ```
+  </Tab>
+  
+  <Tab title="Enums">
+    Constrained values with `EnumOf`:
+    ```ruby
+    class Task < OpenAI::BaseModel
+      required :status, OpenAI::EnumOf[:pending, :in_progress, :completed]
+    end
+    ```
+  </Tab>
+  
+  <Tab title="Unions">
+    Multiple possible types with `UnionOf`:
+    ```ruby
+    class Event < OpenAI::BaseModel
+      required :location, OpenAI::UnionOf[String, Location]
+    end
+    ```
+  </Tab>
+</Tabs>
+
+### Optional Fields
+
+Mark fields as nullable with `nil?: true`:
+
+```ruby
+class Person < OpenAI::BaseModel
+  required :first_name, String
+  required :last_name, String, nil?: true  # Can be nil
+end
+```
+
+### Documentation
+
+Add descriptions to help the model understand field purposes:
+
+```ruby
+class Location < OpenAI::BaseModel
+  required :city, String, doc: "City name"
+  required :postal_code, String, doc: "ZIP or postal code"
+end
+```
+
+## Accessing Parsed Data
+
+The `parsed` property gives you a fully typed instance of your model:
+
+```ruby
+chat_completion
+  .choices
+  .reject { _1.message.refusal }
+  .each do |choice|
+    # parsed is an instance of `CalendarEvent`
+    event = choice.message.parsed
+    
+    puts event.name
+    puts event.date
+    event.participants.each do |participant|
+      puts "#{participant.first_name} - #{participant.status}"
+    end
+  end
+```
+
+<Note>
+  Always check for refusals before accessing parsed data. The model may refuse to generate a response if the request violates content policies.
+</Note>
+
+## Streaming with Structured Outputs
+
+You can combine streaming with structured outputs for real-time parsing:
+
+```ruby
+stream = client.chat.completions.stream(
+  model: "gpt-4o-mini",
+  response_format: MathResponse,
+  messages: [
+    {role: :user, content: "solve 8x + 31 = 2, show all steps"}
+  ]
+)
+
+stream.each do |event|
+  case event
+  when OpenAI::Streaming::ChatContentDoneEvent
+    # Access the parsed object when complete
+    pp(event.parsed)
+  end
+end
+```
+
+See the [Streaming example](/examples/chat/streaming) for more details.
+
+## Best Practices
+
+<Steps>
+  <Step title="Use descriptive field names">
+    Clear field names help the model understand what data to extract.
+  </Step>
+  
+  <Step title="Add documentation">
+    Use the `doc` parameter to provide additional context for complex fields.
+  </Step>
+  
+  <Step title="Handle refusals">
+    Always filter out refusals before accessing parsed data.
+  </Step>
+  
+  <Step title="Use appropriate types">
+    Choose the right type helpers (`ArrayOf`, `EnumOf`, `UnionOf`) for your data structure.
+  </Step>
+</Steps>
+
+## Supported Models
+
+<Note>
+  Structured outputs require models that support the feature, such as `gpt-4o-2024-08-06` or later. Check the OpenAI documentation for the latest model support.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Function Calling" href="/examples/chat/tools">
+    Learn how to use structured outputs with function calling and tools
+  </Card>
+  <Card title="Streaming" href="/examples/chat/streaming">
+    Stream structured outputs in real-time
+  </Card>
+</CardGroup>

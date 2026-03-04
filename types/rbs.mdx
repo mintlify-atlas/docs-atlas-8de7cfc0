@@ -1,0 +1,180 @@
+---
+title: RBS Type Signatures
+description: Use RBS type signatures with the OpenAI Ruby SDK for type checking with Steep and other tools
+---
+
+The OpenAI Ruby SDK ships with comprehensive [RBS](https://github.com/ruby/rbs) type signature definitions in the `sig/` directory. RBS is Ruby's standard type signature format, supported by multiple type checkers including [Steep](https://github.com/soutaro/steep).
+
+## What is RBS?
+
+RBS is Ruby's official type signature language. It provides a way to describe the structure of Ruby programs with type definitions in separate `.rbs` files.
+
+## RBS Files Location
+
+The SDK includes RBS signatures in the `sig/` directory of the gem:
+
+```
+sig/
+├── openai.rbs
+├── openai/
+│   ├── client.rbs
+│   ├── errors.rbs
+│   ├── models.rbs
+│   └── resources/
+│       ├── chat.rbs
+│       ├── completions.rbs
+│       └── ...
+```
+
+## Using RBS with Steep
+
+[Steep](https://github.com/soutaro/steep) is the primary type checker for RBS. Here's how to set it up:
+
+<Steps>
+  <Step title="Install Steep">
+    Add Steep to your Gemfile:
+    ```ruby
+    gem 'steep'
+    ```
+    
+    Then run:
+    ```bash
+    bundle install
+    ```
+  </Step>
+  
+  <Step title="Initialize Steep">
+    Create a `Steepfile` in your project root:
+    ```ruby
+    # Steepfile
+    target :app do
+      check "lib"
+      signature "sig"
+      
+      library "openai"
+    end
+    ```
+  </Step>
+  
+  <Step title="Run Type Checking">
+    Run Steep to check your code:
+    ```bash
+    bundle exec steep check
+    ```
+  </Step>
+</Steps>
+
+## Type-Safe Code Examples
+
+With RBS signatures, type checkers can verify your OpenAI API usage:
+
+```ruby
+require 'openai'
+
+client = OpenAI::Client.new(api_key: ENV["OPENAI_API_KEY"])
+
+# Steep knows the parameter types
+completion = client.chat.completions.create(
+  messages: [{ role: "user", content: "Hello!" }],
+  model: "gpt-5.2"
+)
+
+# Steep knows the response structure
+content = completion.choices[0].message.content
+# Type: String | nil
+```
+
+### Type Errors Caught by Steep
+
+Steep will catch common errors:
+
+```ruby
+# Error: Type mismatch
+client.chat.completions.create(
+  messages: "invalid",  # Should be an Array
+  model: "gpt-5.2"
+)
+
+# Error: Method not found
+response = client.invalid_method()
+
+# Error: No such field
+completion.nonexistent_field
+```
+
+## Editor Integration
+
+Many editors support RBS through language servers:
+
+### VS Code
+
+Install the [Ruby LSP](https://marketplace.visualstudio.com/items?itemName=Shopify.ruby-lsp) extension, which supports RBS type checking.
+
+### RubyMine
+
+RubyMine has built-in support for RBS type signatures.
+
+### Vim/Neovim
+
+Use the [ruby-lsp](https://github.com/Shopify/ruby-lsp) with your LSP client of choice.
+
+## RBS vs RBI (Sorbet)
+
+The OpenAI Ruby SDK provides both RBS and RBI (Sorbet) type definitions:
+
+<CardGroup cols={2}>
+  <Card title="RBS" icon="file-code">
+    **Ruby's standard format**
+    - Used by Steep
+    - Official Ruby signature format
+    - Located in `sig/` directory
+    - Community standard
+  </Card>
+  <Card title="RBI (Sorbet)" icon="file-lines">
+    **Sorbet's format**
+    - Used by Sorbet
+    - Runtime type checking option
+    - Located in `rbi/` directory
+    - Tagged symbols for enums
+  </Card>
+</CardGroup>
+
+Choose based on your type checker:
+- Use **RBS** with Steep or other RBS-compatible tools
+- Use **RBI** with Sorbet
+
+<Tip>
+You can use both! They describe the same API and are kept in sync.
+</Tip>
+
+## Generating RBS for Your Code
+
+If you're building applications with the OpenAI SDK, you can generate RBS signatures for your own code using [typeprof](https://github.com/ruby/typeprof):
+
+```bash
+# Generate RBS from your Ruby code
+bundle exec typeprof lib/my_openai_wrapper.rb > sig/my_openai_wrapper.rbs
+```
+
+## Type Definition Updates
+
+<Info>
+The OpenAI Ruby SDK considers improvements to `*.rbs` and `*.rbi` type definitions to be **non-breaking changes** according to SemVer. Type signatures may be refined in patch releases to improve accuracy.
+</Info>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Sorbet Types" icon="file-code" href="/types/sorbet">
+    Sorbet RBI type definitions
+  </Card>
+  <Card title="BaseModel" icon="cube" href="/types/base-model">
+    BaseModel conveniences
+  </Card>
+  <Card title="RBS Documentation" icon="arrow-up-right-from-square" href="https://github.com/ruby/rbs">
+    Official RBS documentation
+  </Card>
+  <Card title="Steep Documentation" icon="arrow-up-right-from-square" href="https://github.com/soutaro/steep">
+    Steep type checker docs
+  </Card>
+</CardGroup>

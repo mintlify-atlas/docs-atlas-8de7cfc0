@@ -1,0 +1,363 @@
+---
+title: Concurrency & Thread Safety
+description: Thread safety guarantees, connection pooling configuration, and best practices for concurrent usage
+---
+
+The OpenAI Ruby SDK is designed for concurrent usage with built-in connection pooling and thread safety guarantees.
+
+## Thread Safety
+
+Client instances are thread-safe and can be shared across multiple threads:
+
+```ruby
+require "openai"
+
+# Create a single client instance
+client = OpenAI::Client.new
+
+# Safe to use from multiple threads
+threads = 10.times.map do |i|
+  Thread.new do
+    response = client.chat.completions.create(
+      model: "gpt-5.2",
+      messages: [{role: "user", content: "Hello from thread #{i}"}]
+    )
+    puts response.choices.first.message.content
+  end
+end
+
+threads.each(&:join)
+```
+
+<Note>
+`OpenAI::Client` instances are thread-safe but are only fork-safe when there are no in-flight HTTP requests.
+</Note>
+
+## Connection Pooling
+
+Each client instance maintains its own HTTP connection pool:
+
+```ruby
+client = OpenAI::Client.new
+
+# This client has a connection pool with 99 connections by default
+```
+
+### Default Pool Size
+
+The default connection pool size is calculated as:
+
+```ruby
+DEFAULT_MAX_CONNECTIONS = [Etc.nprocessors, 99].max
+```
+
+This means:
+- The pool size is at least 99 connections
+- On systems with more than 99 processors, the pool matches the processor count
+
+<Note>
+The connection pool size of 99 is sufficient for most applications, even those handling high concurrency.
+</Note>
+
+## Connection Pool Behavior
+
+When all connections are in use:
+
+```ruby
+# If all 99 connections are busy, requests wait for an available connection
+client = OpenAI::Client.new
+
+# These requests share the connection pool
+100.times.map do |i|
+  Thread.new do
+    # Requests 1-99 execute immediately
+    # Request 100 waits for a connection to become available
+    client.chat.completions.create(
+      model: "gpt-5.2",
+      messages: [{role: "user", content: "Request #{i}"}]
+    )
+  end
+end.each(&:join)
+```
+
+<Warning>
+Queue time waiting for an available connection counts towards the request timeout.
+</Warning>
+
+## Single Client Instance Pattern
+
+Create one client instance per application and share it:
+
+```ruby
+# config/initializers/openai.rb (Rails example)
+module MyApp
+  # Single shared client instance
+  OPENAI_CLIENT = OpenAI::Client.new(
+    api_key: ENV['OPENAI_API_KEY']
+  )
+end
+
+# app/services/chat_service.rb
+class ChatService
+  def self.complete(message)
+    # Reuse the shared client
+    MyApp::OPENAI_CLIENT.chat.completions.create(
+      model: "gpt-5.2",
+      messages: [{role: "user", content: message}]
+    )
+  end
+end
+```
+
+<Note>
+Reusing a single client instance is recommended because each instance maintains its own connection pool of 99 connections.
+</Note>
+
+## Multi-threaded Examples
+
+<Tabs>
+  <Tab title="Thread Pool">
+    ```ruby
+    require "openai"
+    require "concurrent-ruby"
+
+    client = OpenAI::Client.new
+
+    # Process items with a thread pool
+    pool = Concurrent::FixedThreadPool.new(10)
+    items = (1..100).to_a
+
+    futures = items.map do |item|
+      Concurrent::Future.execute(executor: pool) do
+        client.chat.completions.create(
+          model: "gpt-5.2",
+          messages: [{role: "user", content: "Process item #{item}"}]
+        )
+      end
+    end
+
+    # Wait for all to complete
+    results = futures.map(&:value)
+    pool.shutdown
+    pool.wait_for_termination
+    ```
+  </Tab>
+
+  <Tab title="Parallel Processing">
+    ```ruby
+    require "openai"
+    require "parallel"
+
+    client = OpenAI::Client.new
+
+    # Process in parallel with automatic thread management
+    results = Parallel.map(1..50, in_threads: 20) do |i|
+      client.chat.completions.create(
+        model: "gpt-5.2",
+        messages: [{role: "user", content: "Item #{i}"}]
+      )
+    end
+
+    puts "Processed #{results.count} items"
+    ```
+  </Tab>
+
+  <Tab title="Sidekiq Background Jobs">
+    ```ruby
+    require "sidekiq"
+    require "openai"
+
+    # Share client across Sidekiq workers
+    OPENAI_CLIENT = OpenAI::Client.new
+
+    class ChatCompletionWorker
+      include Sidekiq::Worker
+
+      def perform(user_id, message)
+        # Sidekiq workers run in threads
+        # Safe to share the client
+        response = OPENAI_CLIENT.chat.completions.create(
+          model: "gpt-5.2",
+          messages: [{role: "user", content: message}]
+        )
+
+        # Store result
+        save_response(user_id, response)
+      end
+
+      private
+
+      def save_response(user_id, response)
+        # Your storage logic
+      end
+    end
+
+    # Enqueue jobs
+    100.times do |i|
+      ChatCompletionWorker.perform_async(i, "Hello #{i}")
+    end
+    ```
+  </Tab>
+</Tabs>
+
+## Fork Safety
+
+Client instances are fork-safe only when there are no active requests:
+
+```ruby
+client = OpenAI::Client.new
+
+# Safe: No active requests
+pid = fork do
+  # Child process can use client
+  response = client.chat.completions.create(
+    model: "gpt-5.2",
+    messages: [{role: "user", content: "Hello from child"}]
+  )
+  puts response.choices.first.message.content
+end
+
+Process.wait(pid)
+```
+
+<Warning>
+Do not fork while requests are in flight. Create new client instances in child processes if needed.
+</Warning>
+
+### Forking Web Servers
+
+For forking web servers (Puma, Unicorn), create clients after forking:
+
+```ruby
+# config/puma.rb
+on_worker_boot do
+  # Create fresh client instance in each worker
+  MyApp::OPENAI_CLIENT = OpenAI::Client.new(
+    api_key: ENV['OPENAI_API_KEY']
+  )
+end
+```
+
+## Request-Level Thread Safety
+
+Most SDK classes are not thread-safe at the instance level:
+
+```ruby
+# DON'T: Share request-level objects across threads
+stream = client.completions.create_streaming(...)
+
+# DON'T do this:
+Thread.new { stream.each { |chunk| puts chunk } }
+Thread.new { stream.each { |chunk| puts chunk } }
+```
+
+```ruby
+# DO: Use separate streams per thread
+threads = 2.times.map do
+  Thread.new do
+    # Each thread gets its own stream
+    stream = client.completions.create_streaming(...)
+    stream.each { |chunk| puts chunk }
+  end
+end
+
+threads.each(&:join)
+```
+
+<Note>
+Unless otherwise specified, classes other than `OpenAI::Client` do not have locks protecting their underlying data structures.
+</Note>
+
+## Connection Timeout Configuration
+
+Configure timeouts to handle connection pool exhaustion:
+
+```ruby
+# Default timeout is 600 seconds
+client = OpenAI::Client.new(timeout: 30)
+
+# Per-request timeout
+response = client.chat.completions.create(
+  model: "gpt-5.2",
+  messages: [{role: "user", content: "Hello"}],
+  request_options: {timeout: 10}
+)
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Create one client instance per application">
+    Each client has a pool of 99 connections. Creating multiple clients wastes resources.
+  </Step>
+
+  <Step title="Share client instances across threads">
+    `OpenAI::Client` is thread-safe and designed for concurrent usage.
+  </Step>
+
+  <Step title="Don't share request-level objects">
+    Objects like streams and responses should not be shared across threads.
+  </Step>
+
+  <Step title="Handle connection pool exhaustion">
+    If you need more than 99 concurrent requests, consider creating multiple client instances or implementing request queuing.
+  </Step>
+
+  <Step title="Be cautious with forking">
+    Only fork when there are no active requests, or create new client instances in child processes.
+  </Step>
+</Steps>
+
+## Performance Monitoring
+
+Monitor concurrent request performance:
+
+```ruby
+require "openai"
+require "benchmark"
+
+client = OpenAI::Client.new
+
+# Measure concurrent request performance
+time = Benchmark.measure do
+  threads = 50.times.map do |i|
+    Thread.new do
+      client.chat.completions.create(
+        model: "gpt-5.2",
+        messages: [{role: "user", content: "Request #{i}"}]
+      )
+    end
+  end
+  threads.each(&:join)
+end
+
+puts "Completed 50 concurrent requests in #{time.real} seconds"
+puts "Average: #{time.real / 50} seconds per request"
+```
+
+## Debugging Connection Pool Issues
+
+```ruby
+require "openai"
+require "logger"
+
+# Enable debugging
+logger = Logger.new(STDOUT)
+logger.level = Logger::DEBUG
+
+client = OpenAI::Client.new
+
+# Monitor for timeout errors that might indicate pool exhaustion
+begin
+  response = client.chat.completions.create(
+    model: "gpt-5.2",
+    messages: [{role: "user", content: "Hello"}],
+    request_options: {timeout: 5}
+  )
+rescue OpenAI::Errors::APITimeoutError => e
+  logger.error "Request timed out - possible pool exhaustion"
+  logger.error "Queue time may have exceeded timeout"
+rescue StandardError => e
+  logger.error "Request failed: #{e.message}"
+end
+```

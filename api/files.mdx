@@ -1,0 +1,418 @@
+---
+title: Files
+description: Upload and manage files for use with Assistants, Fine-tuning, and Batch APIs
+---
+
+The Files API allows you to upload documents that can be used with features like Assistants, Fine-tuning, and Batch processing.
+
+## Upload a file
+
+Upload a file that can be used across various endpoints. Individual files can be up to 512 MB, and each project can store up to 2.5 TB of files in total.
+
+```ruby
+client.files.create(params)
+```
+
+<ParamField path="file" type="File" required>
+  The File object (not file name) to be uploaded.
+</ParamField>
+
+<ParamField path="purpose" type="String" required>
+  The intended purpose of the uploaded file. Options:
+  - `assistants`: For use with the Assistants API
+  - `batch`: For the Batch API
+  - `fine-tune`: For fine-tuning
+  - `vision`: For vision tasks
+</ParamField>
+
+<ParamField path="expires_after" type="Object">
+  The expiration policy for a file. By default, files with `purpose=batch` expire after 24 hours.
+  
+  <Expandable title="ExpiresAfter properties">
+    <ParamField path="anchor" type="String">
+      Anchor for expiration. Options: `last_active_at`, `uploaded_at`.
+    </ParamField>
+    
+    <ParamField path="days" type="Integer">
+      Number of days after the anchor time that the file expires.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Response
+
+Returns a `FileObject`.
+
+<ResponseField name="id" type="String">
+  The file identifier, which can be referenced in API endpoints.
+</ResponseField>
+
+<ResponseField name="object" type="String">
+  The object type, always `file`.
+</ResponseField>
+
+<ResponseField name="bytes" type="Integer">
+  The size of the file in bytes.
+</ResponseField>
+
+<ResponseField name="created_at" type="Integer">
+  Unix timestamp of when the file was created.
+</ResponseField>
+
+<ResponseField name="filename" type="String">
+  The name of the file.
+</ResponseField>
+
+<ResponseField name="purpose" type="String">
+  The intended purpose of the file.
+</ResponseField>
+
+<ResponseField name="status" type="String">
+  The current status of the file: `uploaded`, `processed`, or `error`.
+</ResponseField>
+
+### Examples
+
+#### Upload a fine-tuning file
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+file = client.files.create(
+  file: File.open("training_data.jsonl"),
+  purpose: :fine_tune
+)
+
+puts "File ID: #{file.id}"
+puts "Filename: #{file.filename}"
+puts "Size: #{file.bytes} bytes"
+```
+
+#### Upload for Assistants
+
+```ruby
+file = client.files.create(
+  file: File.open("knowledge_base.pdf"),
+  purpose: :assistants
+)
+
+puts "Uploaded: #{file.filename}"
+puts "Status: #{file.status}"
+```
+
+#### Upload with expiration
+
+```ruby
+file = client.files.create(
+  file: File.open("batch_requests.jsonl"),
+  purpose: :batch,
+  expires_after: {
+    anchor: :uploaded_at,
+    days: 7
+  }
+)
+
+puts "File will expire after 7 days"
+```
+
+## Retrieve a file
+
+Returns information about a specific file.
+
+```ruby
+client.files.retrieve(file_id)
+```
+
+<ParamField path="file_id" type="String" required>
+  The ID of the file to use for this request.
+</ParamField>
+
+### Response
+
+Returns a `FileObject`.
+
+### Examples
+
+#### Get file information
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+file = client.files.retrieve("file-abc123")
+
+puts "Filename: #{file.filename}"
+puts "Purpose: #{file.purpose}"
+puts "Created: #{Time.at(file.created_at)}"
+puts "Status: #{file.status}"
+```
+
+#### Check file status
+
+```ruby
+def wait_for_file(client, file_id)
+  loop do
+    file = client.files.retrieve(file_id)
+    puts "Status: #{file.status}"
+    
+    break if file.status == "processed"
+    break if file.status == "error"
+    
+    sleep 2
+  end
+end
+
+file = client.files.create(
+  file: File.open("data.jsonl"),
+  purpose: :fine_tune
+)
+
+wait_for_file(client, file.id)
+```
+
+## List files
+
+Returns a list of files that belong to the user's organization.
+
+```ruby
+client.files.list(params = {})
+```
+
+<ParamField path="purpose" type="String">
+  Only return files with the given purpose.
+</ParamField>
+
+<ParamField path="limit" type="Integer" default="10000">
+  A limit on the number of objects to be returned. Limit can range between 1 and 10,000.
+</ParamField>
+
+<ParamField path="order" type="String" default="desc">
+  Sort order by the `created_at` timestamp. Options: `asc` for ascending order or `desc` for descending order.
+</ParamField>
+
+<ParamField path="after" type="String">
+  A cursor for use in pagination. `after` is an object ID that defines your place in the list.
+</ParamField>
+
+### Response
+
+Returns a paginated list of `FileObject` items.
+
+### Examples
+
+#### List all files
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+files = client.files.list
+
+files.data.each do |file|
+  puts "#{file.filename} (#{file.id}) - #{file.purpose}"
+end
+```
+
+#### Filter by purpose
+
+```ruby
+fine_tune_files = client.files.list(purpose: "fine-tune")
+
+puts "Fine-tuning files:"
+fine_tune_files.data.each do |file|
+  puts "- #{file.filename}"
+end
+```
+
+#### Paginate through files
+
+```ruby
+# Get first page
+page1 = client.files.list(limit: 5, order: :asc)
+
+page1.data.each do |file|
+  puts file.filename
+end
+
+# Get next page using last file ID
+if page1.data.any?
+  last_id = page1.data.last.id
+  page2 = client.files.list(limit: 5, after: last_id)
+  
+  page2.data.each do |file|
+    puts file.filename
+  end
+end
+```
+
+## Delete a file
+
+Delete a file and remove it from all vector stores.
+
+```ruby
+client.files.delete(file_id)
+```
+
+<ParamField path="file_id" type="String" required>
+  The ID of the file to use for this request.
+</ParamField>
+
+### Response
+
+Returns a `FileDeleted` object.
+
+<ResponseField name="id" type="String">
+  The ID of the deleted file.
+</ResponseField>
+
+<ResponseField name="object" type="String">
+  The object type, always `file`.
+</ResponseField>
+
+<ResponseField name="deleted" type="Boolean">
+  Whether the file was successfully deleted.
+</ResponseField>
+
+### Examples
+
+#### Delete a file
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+result = client.files.delete("file-abc123")
+
+if result.deleted
+  puts "File #{result.id} deleted successfully"
+else
+  puts "Failed to delete file"
+end
+```
+
+#### Clean up old files
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+files = client.files.list(purpose: "batch")
+
+# Delete files older than 30 days
+thirty_days_ago = Time.now.to_i - (30 * 24 * 60 * 60)
+
+files.data.each do |file|
+  if file.created_at < thirty_days_ago
+    result = client.files.delete(file.id)
+    puts "Deleted: #{file.filename}"
+  end
+end
+```
+
+## Retrieve file content
+
+Returns the contents of the specified file.
+
+```ruby
+client.files.content(file_id)
+```
+
+<ParamField path="file_id" type="String" required>
+  The ID of the file to use for this request.
+</ParamField>
+
+### Response
+
+Returns a `StringIO` object containing the file content.
+
+### Examples
+
+#### Download file content
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+content = client.files.content("file-abc123")
+
+# Save to local file
+File.open("downloaded_file.jsonl", "wb") do |file|
+  file.write(content.read)
+end
+
+puts "File downloaded successfully"
+```
+
+#### Read file content
+
+```ruby
+content = client.files.content("file-abc123")
+
+# Read as text
+text = content.read
+puts text
+
+# Or process line by line
+content.rewind
+content.each_line do |line|
+  puts line
+end
+```
+
+## File formats
+
+### Fine-tuning files
+Must be `.jsonl` files with specific formats:
+
+```jsonl
+{"messages": [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": "Hello!"}, {"role": "assistant", "content": "Hi there!"}]}
+{"messages": [{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": "How are you?"}, {"role": "assistant", "content": "I'm doing well!"}]}
+```
+
+### Batch API files
+Must be `.jsonl` files up to 200 MB:
+
+```jsonl
+{"custom_id": "request-1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gpt-4", "messages": [{"role": "user", "content": "Hello"}]}}
+{"custom_id": "request-2", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "gpt-4", "messages": [{"role": "user", "content": "Hi"}]}}
+```
+
+### Assistants files
+Supports various formats including:
+- Documents: `.pdf`, `.docx`, `.txt`, `.md`
+- Spreadsheets: `.xlsx`, `.csv`
+- Code: `.py`, `.js`, `.rb`, `.java`, etc.
+- Images: `.png`, `.jpg`, `.gif`, `.webp`
+
+Files can be up to 2 million tokens.
+
+## Storage limits
+
+- **Individual file size**: Up to 512 MB
+- **Project storage**: Up to 2.5 TB total
+- **Batch files**: Up to 200 MB per file
+- **Assistants files**: Up to 2 million tokens
+
+Contact OpenAI support if you need to increase these limits.
+
+## Best practices
+
+- **Verify upload**: Check the `status` field after uploading
+- **Set expiration**: Use `expires_after` for temporary files to manage storage
+- **Clean up**: Delete files you no longer need to free up space
+- **Use correct purpose**: Specify the right purpose for proper processing
+- **Handle errors**: Implement retry logic for failed uploads
+- **Monitor storage**: Keep track of your total storage usage
+
+## Related
+
+- [Assistants API](https://platform.openai.com/docs/api-reference/assistants)
+- [Fine-tuning API](/api/fine-tuning)
+- [Batch API](https://platform.openai.com/docs/api-reference/batch)

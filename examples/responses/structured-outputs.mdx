@@ -1,0 +1,337 @@
+---
+title: 'Structured Outputs with Responses'
+description: 'Generate type-safe, structured outputs using the Responses API'
+---
+
+## Overview
+
+Structured outputs ensure that the model's response conforms exactly to your specified schema. This is essential for applications that need reliable, parseable data. The Responses API supports structured outputs for both text responses and function calling.
+
+## Structured Text Responses
+
+Use the `text` parameter to define the structure of the response content:
+
+<Steps>
+  <Step title="Define your response models">
+    Create `BaseModel` classes that represent the structure you want:
+
+    ```ruby
+    class Location < OpenAI::BaseModel
+      required :address, String
+      required :city, String, doc: "City name"
+      required :postal_code, String, nil?: true
+    end
+
+    class Participant < OpenAI::BaseModel
+      required :first_name, String
+      required :last_name, String, nil?: true
+      required :status, OpenAI::EnumOf[:confirmed, :unconfirmed, :tentative]
+    end
+
+    class CalendarEvent < OpenAI::BaseModel
+      required :name, String
+      required :date, String
+      required :participants, OpenAI::ArrayOf[Participant]
+      required :optional_participants, OpenAI::ArrayOf[Participant, doc: "who might not show up"], nil?: true
+      required :is_virtual, OpenAI::Boolean
+      required :location,
+               OpenAI::UnionOf[String, Location],
+               nil?: true,
+               doc: "Event location"
+    end
+    ```
+  </Step>
+
+  <Step title="Create a response with the text parameter">
+    Pass your model class to enforce the structure:
+
+    ```ruby
+    client = OpenAI::Client.new
+
+    response = client.responses.create(
+      model: "gpt-4o-2024-08-06",
+      input: [
+        {role: :system, content: "Extract the event information."},
+        {
+          role: :user,
+          content: <<~CONTENT
+            Alice Shah and Lena are going to a science fair on Friday at 123 Main St. in San Diego.
+            They have also invited Jasper Vellani and Talia Groves - Jasper has not responded and Talia said she is thinking about it.
+          CONTENT
+        }
+      ],
+      text: CalendarEvent
+    )
+    ```
+  </Step>
+
+  <Step title="Access the parsed objects">
+    The response automatically deserializes into your model instances:
+
+    ```ruby
+    response
+      .output
+      .flat_map { _1.content }
+      .grep_v(OpenAI::Models::Responses::ResponseOutputRefusal)
+      .each do |content|
+        # content.parsed is an instance of CalendarEvent
+        pp(content.parsed)
+      end
+    ```
+  </Step>
+</Steps>
+
+## Streaming Structured Outputs
+
+You can stream structured outputs and access partially parsed objects:
+
+```ruby
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../../lib/openai"
+
+# Defining structured output models.
+class Step < OpenAI::BaseModel
+  required :explanation, String
+  required :output, String
+end
+
+class MathResponse < OpenAI::BaseModel
+  required :steps, OpenAI::ArrayOf[Step]
+  required :final_answer, String
+end
+
+client = OpenAI::Client.new
+
+stream = client.responses.stream(
+  input: "solve 8x + 31 = 2",
+  model: "gpt-4o-2024-08-06",
+  text: MathResponse
+)
+
+stream.each do |event|
+  case event
+  when OpenAI::Streaming::ResponseTextDeltaEvent
+    print(event.delta)
+  when OpenAI::Streaming::ResponseTextDoneEvent
+    puts
+    puts("--- Parsed object ---")
+    pp(event.parsed)
+  end
+end
+
+response = stream.get_final_response
+
+puts
+puts("----- parsed outputs from final response -----")
+response
+  .output
+  .flat_map { _1.content }
+  .each do |content|
+    # parsed is an instance of `MathResponse`
+    pp(content.parsed)
+  end
+```
+
+<Info>
+  The `ResponseTextDoneEvent` includes a `parsed` field containing the fully deserialized object once text generation is complete.
+</Info>
+
+## Function Calling with Structured Outputs
+
+Define tools as `BaseModel` classes and get type-safe function call arguments:
+
+<CodeGroup>
+```ruby Complete Example
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../lib/openai"
+
+class GetWeather < OpenAI::BaseModel
+  required :location, String, doc: "City and country e.g. Bogotá, Colombia"
+end
+
+# gets API Key from environment variable `OPENAI_API_KEY`
+client = OpenAI::Client.new
+
+response = client.responses.create(
+  model: "gpt-4o-2024-08-06",
+  input: [
+    {
+      role: :user,
+      content: "What's the weather like in Paris today?"
+    }
+  ],
+  tools: [GetWeather]
+)
+
+response
+  .output
+  .each do |output|
+    # parsed is an instance of `GetWeather`
+    pp(output.parsed)
+  end
+```
+
+```ruby Tool Definition
+class GetWeather < OpenAI::BaseModel
+  required :location, String, doc: "City and country e.g. Bogotá, Colombia"
+end
+```
+
+```ruby Using the Tool
+response = client.responses.create(
+  model: "gpt-4o-2024-08-06",
+  input: [
+    {
+      role: :user,
+      content: "What's the weather like in Paris today?"
+    }
+  ],
+  tools: [GetWeather]
+)
+```
+</CodeGroup>
+
+## Complex Nested Structures
+
+You can create arbitrarily complex nested models:
+
+```ruby
+class DynamicValue < OpenAI::BaseModel
+  required :column_name, String
+end
+
+class Condition < OpenAI::BaseModel
+  required :column, String
+  required :operator, OpenAI::EnumOf[:eq, :gt, :lt, :le, :ge, :ne]
+  required :value, OpenAI::UnionOf[String, Integer, DynamicValue]
+end
+
+Columns = OpenAI::EnumOf[
+  :id,
+  :status,
+  :expected_delivery_date,
+  :delivered_at,
+  :shipped_at,
+  :ordered_at,
+  :canceled_at
+]
+
+class Query < OpenAI::BaseModel
+  required :table_name, OpenAI::EnumOf[:orders, :customers, :products]
+  required :columns, OpenAI::ArrayOf[Columns]
+  required :conditions, OpenAI::ArrayOf[Condition]
+  required :order_by, OpenAI::EnumOf[:asc, :desc]
+end
+```
+
+## Schema Type Reference
+
+### Basic Types
+
+- `String` - Text values
+- `Integer` - Whole numbers
+- `Float` - Decimal numbers
+- `OpenAI::Boolean` - true/false values (use `OpenAI::Boolean`, not Ruby's `TrueClass`/`FalseClass`)
+
+### Collection Types
+
+**Arrays:**
+```ruby
+required :tags, OpenAI::ArrayOf[String]
+required :participants, OpenAI::ArrayOf[Participant]
+```
+
+**Enums:**
+```ruby
+required :status, OpenAI::EnumOf[:pending, :active, :completed]
+```
+
+**Unions (multiple possible types):**
+```ruby
+required :location, OpenAI::UnionOf[String, Location]
+required :value, OpenAI::UnionOf[String, Integer, DynamicValue]
+```
+
+### Optional Fields
+
+Mark fields as nullable with `nil?: true`:
+
+```ruby
+required :optional_field, String, nil?: true
+```
+
+### Field Documentation
+
+Provide descriptions to help the model understand field purposes:
+
+```ruby
+required :city, String, doc: "City name"
+required :location, String, doc: "City and country e.g. Bogotá, Colombia"
+```
+
+<Note>
+  Field documentation is particularly important for function calling, as it helps the model understand when and how to use each parameter.
+</Note>
+
+## Accessing Parsed Data
+
+### Non-Streaming Responses
+
+```ruby
+response
+  .output
+  .flat_map { _1.content }
+  .grep_v(OpenAI::Models::Responses::ResponseOutputRefusal)
+  .each do |content|
+    # content.parsed is an instance of your BaseModel class
+    pp(content.parsed)
+  end
+```
+
+### Streaming Responses
+
+```ruby
+stream.each do |event|
+  case event
+  when OpenAI::Streaming::ResponseTextDoneEvent
+    # event.parsed contains the complete parsed object
+    pp(event.parsed)
+  end
+end
+
+# Or get from the final response
+response = stream.get_final_response
+response.output.flat_map { _1.content }.each do |content|
+  pp(content.parsed)
+end
+```
+
+### Function Calls
+
+For function calling responses:
+
+```ruby
+response.output.each do |output|
+  case output
+  when OpenAI::Models::Responses::ResponseFunctionToolCall
+    # output.parsed is an instance of your tool's BaseModel class
+    pp(output.parsed)
+  end
+end
+```
+
+## Best Practices
+
+1. **Use descriptive field names**: Make it easy for the model to understand what each field represents
+2. **Add documentation**: Use the `doc` parameter for complex or ambiguous fields
+3. **Choose appropriate types**: Use enums for constrained values, unions for flexible types
+4. **Handle refusals**: Always filter out `ResponseOutputRefusal` when processing outputs
+5. **Validate complex structures**: For deeply nested models, test with various inputs to ensure reliability
+
+<Info>
+  Structured outputs are guaranteed to match your schema exactly. The model cannot deviate from the specified structure, making this ideal for production applications that require reliable data formats.
+</Info>

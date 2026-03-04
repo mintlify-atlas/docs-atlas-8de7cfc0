@@ -1,0 +1,301 @@
+---
+title: 'Retry Configuration'
+description: 'Configure automatic retry behavior with exponential backoff'
+---
+
+## Automatic Retries
+
+The OpenAI Ruby SDK automatically retries failed requests that are likely to succeed on retry. This includes network errors, rate limits, and server errors.
+
+### Default Behavior
+
+By default, the SDK will retry failed requests up to **2 times** with exponential backoff:
+
+```ruby
+# lib/openai/client.rb:6
+DEFAULT_MAX_RETRIES = 2
+```
+
+## Retry Configuration
+
+### Max Retries
+
+Control the maximum number of retry attempts:
+
+```ruby
+# Default: 2 retries
+client = OpenAI::Client.new(api_key: 'your-api-key')
+
+# Disable retries
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  max_retries: 0
+)
+
+# More aggressive retries
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  max_retries: 5
+)
+```
+
+### Per-Request Overrides
+
+Override retry settings for individual requests:
+
+```ruby
+client = OpenAI::Client.new(api_key: 'your-api-key')
+
+# This request will retry up to 5 times
+response = client.chat.completions.create(
+  {
+    model: 'gpt-4',
+    messages: [{role: 'user', content: 'Hello!'}]
+  },
+  max_retries: 5
+)
+
+# This request will not retry
+response = client.chat.completions.create(
+  {
+    model: 'gpt-4',
+    messages: [{role: 'user', content: 'Hello!'}]
+  },
+  max_retries: 0
+)
+```
+
+## Exponential Backoff
+
+The SDK uses exponential backoff with jitter to calculate retry delays, preventing thundering herd problems.
+
+### Delay Configuration
+
+<ParamField path="initial_retry_delay" type="float" default="0.5">
+  Initial delay in seconds before the first retry attempt.
+  
+  ```ruby
+  # lib/openai/client.rb:13
+  DEFAULT_INITIAL_RETRY_DELAY = 0.5
+  ```
+</ParamField>
+
+<ParamField path="max_retry_delay" type="float" default="8.0">
+  Maximum delay in seconds between retry attempts.
+  
+  ```ruby
+  # lib/openai/client.rb:16
+  DEFAULT_MAX_RETRY_DELAY = 8.0
+  ```
+</ParamField>
+
+### Backoff Algorithm
+
+The delay between retries is calculated using this algorithm:
+
+```ruby
+# lib/openai/internal/transport/base_client.rb:345-348
+scale = retry_count**2
+jitter = 1 - (0.25 * rand)
+(@initial_retry_delay * scale * jitter).clamp(0, @max_retry_delay)
+```
+
+**Formula:**
+```
+delay = min(initial_delay * (retry_count^2) * jitter, max_delay)
+```
+
+Where `jitter` is a random value between 0.75 and 1.0.
+
+### Example Delays
+
+With default settings:
+
+| Retry Attempt | Scale (count²) | Min Delay | Max Delay |
+|--------------|----------------|-----------|------------|
+| 1st retry | 1 | 0.375s | 0.5s |
+| 2nd retry | 4 | 1.5s | 2.0s |
+| 3rd retry | 9 | 3.375s | 4.5s |
+| 4th retry | 16 | 6.0s | 8.0s |
+| 5th retry | 25 | 8.0s | 8.0s (clamped) |
+
+<Note>
+  Actual delays include random jitter between 75% and 100% of the calculated value to avoid synchronized retries across multiple clients.
+</Note>
+
+## Custom Retry Delays
+
+Configure custom delay parameters:
+
+```ruby
+client = OpenAI::Client.new(
+  api_key: 'your-api-key',
+  max_retries: 5,
+  initial_retry_delay: 1.0,   # Start with 1 second
+  max_retry_delay: 30.0       # Cap at 30 seconds
+)
+```
+
+## Retry-After Header
+
+The SDK respects the `Retry-After` header from the API when present:
+
+```ruby
+# lib/openai/internal/transport/base_client.rb:332-343
+# Check for Retry-After-MS (non-standard)
+span = Float(headers["retry-after-ms"], exception: false)&.then { _1 / 1000 }
+return span if span
+
+# Check for Retry-After in seconds
+retry_header = headers["retry-after"]
+return span if (span = Float(retry_header, exception: false))
+
+# Check for Retry-After as HTTP date
+span = retry_header&.then do
+  Time.httpdate(_1) - Time.now
+rescue ArgumentError
+  nil
+end
+```
+
+The SDK supports three formats:
+- `retry-after-ms` header (milliseconds)
+- `retry-after` header with integer seconds
+- `retry-after` header with HTTP date
+
+## Retryable Conditions
+
+The SDK automatically retries requests when:
+
+### Status Codes
+
+```ruby
+# lib/openai/internal/transport/base_client.rb:58
+in [_, 408 | 409 | 429 | (500..)]
+  # retry on:
+  # 408: timeouts
+  # 409: locks
+  # 429: rate limits
+  # 500+: unknown errors
+  true
+```
+
+| Status Code | Description | Retryable |
+|------------|-------------|----------|
+| 408 | Request Timeout | Yes |
+| 409 | Conflict | Yes |
+| 429 | Rate Limit | Yes |
+| 500+ | Server Errors | Yes |
+
+### Connection Errors
+
+Network errors and timeouts are also retried:
+
+```ruby
+rescue OpenAI::Errors::APIConnectionError => e
+  status = e
+```
+
+<Note>
+  Connection errors and `APITimeoutError` are automatically retried up to `max_retries` times.
+</Note>
+
+### Header Override
+
+The API can control retry behavior via the `x-should-retry` header:
+
+```ruby
+# lib/openai/internal/transport/base_client.rb:54-57
+coerced = OpenAI::Internal::Util.coerce_boolean(headers["x-should-retry"])
+case [coerced, status]
+in [true | false, _]
+  coerced
+```
+
+If the API includes `x-should-retry: false`, the request will not be retried regardless of status code.
+
+## Retry Headers
+
+The SDK tracks retry attempts in request headers:
+
+```ruby
+# lib/openai/internal/transport/base_client.rb:290-292
+unless headers.key?("x-stainless-retry-count")
+  headers["x-stainless-retry-count"] = "0"
+end
+```
+
+Each retry increments the `x-stainless-retry-count` header, allowing the server to see how many times a request has been attempted.
+
+## Best Practices
+
+<Steps>
+  <Step title="Use default retries for most cases">
+    The default retry configuration (2 retries with exponential backoff) works well for most use cases.
+  </Step>
+  
+  <Step title="Increase retries for critical operations">
+    For critical operations that must succeed, consider increasing `max_retries`:
+    
+    ```ruby
+    client.chat.completions.create(
+      {model: 'gpt-4', messages: messages},
+      max_retries: 5
+    )
+    ```
+  </Step>
+  
+  <Step title="Disable retries for idempotent operations">
+    For non-idempotent operations where duplicates would be problematic:
+    
+    ```ruby
+    client.files.create(
+      {file: file_path, purpose: 'fine-tune'},
+      max_retries: 0
+    )
+    ```
+  </Step>
+  
+  <Step title="Monitor rate limits">
+    If you frequently hit rate limits, consider:
+    - Implementing client-side rate limiting
+    - Increasing retry delays
+    - Spreading requests over time
+  </Step>
+</Steps>
+
+<Warning>
+  Very high `max_retries` values can cause requests to take a very long time to fail. Consider also adjusting `timeout` when increasing retries.
+</Warning>
+
+## Complete Example
+
+```ruby
+require 'openai'
+
+# Configure client with custom retry behavior
+client = OpenAI::Client.new(
+  api_key: ENV['OPENAI_API_KEY'],
+  max_retries: 4,              # Up to 4 retry attempts
+  initial_retry_delay: 1.0,    # Start with 1 second delay
+  max_retry_delay: 16.0        # Cap delays at 16 seconds
+)
+
+begin
+  # This will retry automatically on failures
+  response = client.chat.completions.create(
+    model: 'gpt-4',
+    messages: [
+      {role: 'user', content: 'Hello!'}
+    ]
+  )
+  
+  puts response.choices.first.message.content
+rescue OpenAI::Errors::RateLimitError => e
+  # Still hit rate limit after all retries
+  puts "Rate limited: #{e.message}"
+rescue OpenAI::Errors::APIError => e
+  # Other API errors after retries exhausted
+  puts "API error: #{e.message}"
+end
+```

@@ -1,0 +1,356 @@
+---
+title: Conversations
+description: Manage conversation state and history for multi-turn interactions
+---
+
+## Overview
+
+The Conversations API allows you to create and manage conversation contexts that persist across multiple model responses. Conversations store message history and can be referenced in subsequent API calls.
+
+## Create conversation
+
+Creates a new conversation with optional initial items.
+
+```ruby
+conversation = client.conversations.create(
+  metadata: {
+    user_id: "user_123",
+    topic: "product_support"
+  }
+)
+
+puts conversation.id  # => "conv_abc123"
+```
+
+### Parameters
+
+<ParamField path="items" type="array">
+  Initial items to include in the conversation (up to 20). Can include:
+  - Messages (user, assistant, system)
+  - Tool calls and outputs
+  - Reasoning items
+  - Other input/output types
+</ParamField>
+
+<ParamField path="metadata" type="hash">
+  Optional metadata for organizing conversations (up to 16 key-value pairs)
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Unique conversation identifier
+</ResponseField>
+
+<ResponseField name="object" type="string">
+  Object type: `conversation`
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp of creation
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Attached metadata
+</ResponseField>
+
+## Retrieve conversation
+
+Retrieves a conversation by ID.
+
+```ruby
+conversation = client.conversations.retrieve("conv_abc123")
+puts conversation.metadata
+```
+
+### Parameters
+
+<ParamField path="conversation_id" type="string" required>
+  ID of the conversation to retrieve
+</ParamField>
+
+## Update conversation
+
+Updates a conversation's metadata.
+
+```ruby
+conversation = client.conversations.update(
+  "conv_abc123",
+  metadata: {
+    user_id: "user_123",
+    topic: "billing_inquiry",
+    status: "resolved"
+  }
+)
+```
+
+### Parameters
+
+<ParamField path="conversation_id" type="string" required>
+  ID of the conversation to update
+</ParamField>
+
+<ParamField path="metadata" type="hash" required>
+  Updated metadata (replaces existing metadata)
+</ParamField>
+
+## Delete conversation
+
+Deletes a conversation. Note that items in the conversation are not deleted.
+
+```ruby
+client.conversations.delete("conv_abc123")
+```
+
+### Parameters
+
+<ParamField path="conversation_id" type="string" required>
+  ID of the conversation to delete
+</ParamField>
+
+## Conversation Items
+
+Manage individual items within a conversation.
+
+### Create item
+
+Adds an item to a conversation.
+
+```ruby
+item = client.conversations.items.create(
+  "conv_abc123",
+  type: "message",
+  role: "user",
+  content: [
+    { type: "input_text", text: "What is your return policy?" }
+  ]
+)
+```
+
+### List items
+
+Lists all items in a conversation.
+
+```ruby
+items = client.conversations.items.list(
+  "conv_abc123",
+  limit: 50
+)
+
+items.data.each do |item|
+  puts "#{item.type}: #{item.role}"
+end
+```
+
+### Retrieve item
+
+Retrieves a specific item from a conversation.
+
+```ruby
+item = client.conversations.items.retrieve(
+  "conv_abc123",
+  "item_xyz789"
+)
+```
+
+### Delete item
+
+Deletes an item from a conversation.
+
+```ruby
+client.conversations.items.delete(
+  "conv_abc123",
+  "item_xyz789"
+)
+```
+
+## Examples
+
+### Multi-turn conversation
+
+```ruby
+# Create conversation
+conversation = client.conversations.create(
+  metadata: { user_id: "user_123" }
+)
+
+# First turn
+response1 = client.responses.create(
+  model: "gpt-4o",
+  conversation: conversation.id,
+  input: "What are your business hours?",
+  store: true
+)
+
+# Second turn (continues conversation)
+response2 = client.responses.create(
+  model: "gpt-4o",
+  conversation: conversation.id,
+  input: "Do you offer weekend support?",
+  store: true
+)
+
+# Third turn
+response3 = client.responses.create(
+  model: "gpt-4o",
+  conversation: conversation.id,
+  input: "How can I reach you outside business hours?",
+  store: true
+)
+```
+
+### Creating conversation with initial context
+
+```ruby
+conversation = client.conversations.create(
+  items: [
+    {
+      type: "message",
+      role: "system",
+      content: [
+        {
+          type: "input_text",
+          text: "You are a helpful customer support agent for Acme Corp."
+        }
+      ]
+    },
+    {
+      type: "message",
+      role: "user",
+      content: [
+        {
+          type: "input_text",
+          text: "I need help with my order #12345"
+        }
+      ]
+    }
+  ],
+  metadata: {
+    user_id: "user_123",
+    order_id: "12345"
+  }
+)
+
+# Continue the conversation
+response = client.responses.create(
+  model: "gpt-4o",
+  conversation: conversation.id
+)
+```
+
+### Managing conversation history
+
+```ruby
+# Retrieve conversation items
+items = client.conversations.items.list("conv_abc123")
+
+# Display conversation history
+items.data.each do |item|
+  next unless item.type == "message"
+  
+  role = item.role
+  text = item.content.find { |c| c.type == "output_text" || c.type == "input_text" }
+  
+  puts "#{role}: #{text&.text}"
+end
+
+# Delete old messages to manage context size
+items_to_delete = items.data[0..5]  # Keep only recent messages
+items_to_delete.each do |item|
+  client.conversations.items.delete("conv_abc123", item.id)
+end
+```
+
+### Conversation with metadata tracking
+
+```ruby
+# Create conversation with tracking metadata
+conversation = client.conversations.create(
+  metadata: {
+    user_id: "user_123",
+    session_id: "session_456",
+    channel: "web_chat",
+    started_at: Time.now.iso8601
+  }
+)
+
+# Later, update status
+client.conversations.update(
+  conversation.id,
+  metadata: {
+    user_id: "user_123",
+    session_id: "session_456",
+    channel: "web_chat",
+    started_at: conversation.metadata[:started_at],
+    status: "resolved",
+    resolved_at: Time.now.iso8601
+  }
+)
+```
+
+### Streaming with conversations
+
+```ruby
+conversation = client.conversations.create
+
+stream = client.responses.stream(
+  model: "gpt-4o",
+  conversation: conversation.id,
+  input: "Tell me a story",
+  store: true
+)
+
+stream.on_text_delta { |delta| print delta }
+stream.run
+
+# Continue in same conversation
+stream2 = client.responses.stream(
+  model: "gpt-4o",
+  conversation: conversation.id,
+  input: "Make it funnier",
+  store: true
+)
+
+stream2.on_text_delta { |delta| print delta }
+stream2.run
+```
+
+### Alternative: Using previous_response_id
+
+```ruby
+# Without explicit conversation
+response1 = client.responses.create(
+  model: "gpt-4o",
+  input: "What is the capital of France?",
+  store: true
+)
+
+# Reference previous response
+response2 = client.responses.create(
+  model: "gpt-4o",
+  input: "What is its population?",
+  previous_response_id: response1.id
+)
+
+# This automatically creates an implicit conversation
+```
+
+## Best Practices
+
+### Context management
+
+- Use conversations for multi-turn interactions where context matters
+- Set meaningful metadata for filtering and analytics
+- Periodically clean up old items to manage context window size
+- Use `previous_response_id` for simple back-and-forth without explicit conversations
+
+### Performance
+
+- Avoid storing too many items in a single conversation (>100)
+- Use the Responses API's `compact` method for long conversations
+- Delete conversations when the session ends
+
+## Related
+
+- [Responses API](/api/responses)
+- [Conversation state guide](https://platform.openai.com/docs/guides/conversation-state)

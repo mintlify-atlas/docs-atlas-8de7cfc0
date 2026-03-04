@@ -1,0 +1,357 @@
+---
+title: Assistants (Beta)
+description: Build AI assistants with custom instructions, tools, and knowledge
+---
+
+<Note>
+  The Assistants API is in beta. This API is deprecated and may be removed in future versions. Consider using the [Responses API](/api/responses) for new applications.
+</Note>
+
+## Overview
+
+The Assistants API allows you to build AI assistants with custom instructions, tools (Code Interpreter, File Search, Function calling), and knowledge bases. Assistants can maintain context across multiple conversations.
+
+<Note>
+  All assistant endpoints require the `OpenAI-Beta: assistants=v2` header, which is automatically added by the SDK.
+</Note>
+
+## Create assistant
+
+Creates an assistant with a model and instructions.
+
+```ruby
+assistant = client.beta.assistants.create(
+  model: "gpt-4o",
+  name: "Math Tutor",
+  instructions: "You are a helpful math tutor. Answer questions clearly and show your work.",
+  tools: [
+    { type: "code_interpreter" },
+    { type: "file_search" }
+  ]
+)
+```
+
+### Parameters
+
+<ParamField path="model" type="string" required>
+  ID of the model to use. See the [model list](https://platform.openai.com/docs/models) for available options.
+</ParamField>
+
+<ParamField path="name" type="string">
+  Name of the assistant (max 256 characters)
+</ParamField>
+
+<ParamField path="description" type="string">
+  Description of the assistant (max 512 characters)
+</ParamField>
+
+<ParamField path="instructions" type="string">
+  System instructions for the assistant (max 256,000 characters)
+</ParamField>
+
+<ParamField path="tools" type="array">
+  Tools available to the assistant (max 128). Options:
+  
+  <Expandable title="Code Interpreter">
+    ```ruby
+    { type: "code_interpreter" }
+    ```
+    Allows the assistant to write and run Python code
+  </Expandable>
+  
+  <Expandable title="File Search">
+    ```ruby
+    { type: "file_search" }
+    ```
+    Enables searching through uploaded files
+  </Expandable>
+  
+  <Expandable title="Function">
+    ```ruby
+    {
+      type: "function",
+      function: {
+        name: "get_weather",
+        description: "Get current weather",
+        parameters: {
+          type: "object",
+          properties: {
+            location: { type: "string" }
+          },
+          required: ["location"]
+        }
+      }
+    }
+    ```
+    Custom function the assistant can call
+  </Expandable>
+</ParamField>
+
+<ParamField path="tool_resources" type="object">
+  Resources for tools:
+  
+  <Expandable title="Code Interpreter">
+    ```ruby
+    tool_resources: {
+      code_interpreter: {
+        file_ids: ["file-abc123"]
+      }
+    }
+    ```
+  </Expandable>
+  
+  <Expandable title="File Search">
+    ```ruby
+    tool_resources: {
+      file_search: {
+        vector_store_ids: ["vs-abc123"]
+      }
+    }
+    ```
+  </Expandable>
+</ParamField>
+
+<ParamField path="metadata" type="hash">
+  Optional metadata (up to 16 key-value pairs)
+</ParamField>
+
+<ParamField path="temperature" type="float">
+  Sampling temperature (0-2, default: 1)
+</ParamField>
+
+<ParamField path="top_p" type="float">
+  Nucleus sampling parameter (0-1)
+</ParamField>
+
+<ParamField path="response_format" type="object">
+  Response format specification:
+  - `auto` (default)
+  - `{ type: "text" }`
+  - `{ type: "json_object" }`
+  - `{ type: "json_schema", json_schema: {...} }`
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Unique assistant identifier
+</ResponseField>
+
+<ResponseField name="object" type="string">
+  Object type: `assistant`
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp of creation
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Assistant name
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Assistant description
+</ResponseField>
+
+<ResponseField name="model" type="string">
+  Model ID
+</ResponseField>
+
+<ResponseField name="instructions" type="string">
+  System instructions
+</ResponseField>
+
+<ResponseField name="tools" type="array">
+  Enabled tools
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Attached metadata
+</ResponseField>
+
+## Retrieve assistant
+
+Retrieves an assistant by ID.
+
+```ruby
+assistant = client.beta.assistants.retrieve("asst_abc123")
+puts assistant.name
+```
+
+### Parameters
+
+<ParamField path="assistant_id" type="string" required>
+  ID of the assistant to retrieve
+</ParamField>
+
+## Update assistant
+
+Modifies an assistant.
+
+```ruby
+assistant = client.beta.assistants.update(
+  "asst_abc123",
+  instructions: "Updated instructions for the assistant",
+  name: "Updated Math Tutor"
+)
+```
+
+### Parameters
+
+<ParamField path="assistant_id" type="string" required>
+  ID of the assistant to modify
+</ParamField>
+
+All creation parameters are available as optional update parameters.
+
+## List assistants
+
+Returns a list of assistants.
+
+```ruby
+assistants = client.beta.assistants.list(
+  limit: 20,
+  order: :desc
+)
+
+assistants.data.each do |assistant|
+  puts "#{assistant.name} (#{assistant.model})"
+end
+```
+
+### Parameters
+
+<ParamField path="limit" type="integer">
+  Number to return (1-100, default: 20)
+</ParamField>
+
+<ParamField path="order" type="string">
+  Sort order: `asc` or `desc` (default)
+</ParamField>
+
+<ParamField path="after" type="string">
+  Cursor for pagination
+</ParamField>
+
+<ParamField path="before" type="string">
+  Cursor for reverse pagination
+</ParamField>
+
+## Delete assistant
+
+Deletes an assistant.
+
+```ruby
+client.beta.assistants.delete("asst_abc123")
+```
+
+### Parameters
+
+<ParamField path="assistant_id" type="string" required>
+  ID of the assistant to delete
+</ParamField>
+
+## Examples
+
+### Math tutor with Code Interpreter
+
+```ruby
+# Create assistant
+assistant = client.beta.assistants.create(
+  name: "Math Tutor",
+  instructions: "You are a helpful math tutor. Solve problems step by step.",
+  model: "gpt-4o",
+  tools: [{ type: "code_interpreter" }]
+)
+
+# Create thread
+thread = client.beta.threads.create
+
+# Add message
+client.beta.threads.messages.create(
+  thread.id,
+  role: "user",
+  content: "Solve: x^2 + 5x + 6 = 0"
+)
+
+# Run assistant
+run = client.beta.threads.runs.create(
+  thread.id,
+  assistant_id: assistant.id
+)
+
+# Wait for completion
+loop do
+  run = client.beta.threads.runs.retrieve(thread.id, run.id)
+  break if run.status == "completed"
+  sleep 1
+end
+
+# Get response
+messages = client.beta.threads.messages.list(thread.id)
+puts messages.data.first.content.first.text.value
+```
+
+### RAG assistant with File Search
+
+```ruby
+# Create vector store with files
+vector_store = client.vector_stores.create(
+  name: "Product Docs",
+  file_ids: [file1.id, file2.id]
+)
+
+# Create assistant with file search
+assistant = client.beta.assistants.create(
+  name: "Documentation Assistant",
+  instructions: "Answer questions using the uploaded documentation.",
+  model: "gpt-4o",
+  tools: [{ type: "file_search" }],
+  tool_resources: {
+    file_search: {
+      vector_store_ids: [vector_store.id]
+    }
+  }
+)
+```
+
+### Function calling assistant
+
+```ruby
+assistant = client.beta.assistants.create(
+  name: "Weather Assistant",
+  instructions: "Help users check the weather.",
+  model: "gpt-4o",
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: "get_current_weather",
+        description: "Get the current weather for a location",
+        parameters: {
+          type: "object",
+          properties: {
+            location: {
+              type: "string",
+              description: "City and state, e.g. San Francisco, CA"
+            },
+            unit: {
+              type: "string",
+              enum: ["celsius", "fahrenheit"]
+            }
+          },
+          required: ["location"]
+        }
+      }
+    }
+  ]
+)
+```
+
+## Related
+
+- [Assistants guide](https://platform.openai.com/docs/assistants)
+- [Threads API](/api/threads)
+- [Messages API](/api/messages)
+- [Runs API](/api/runs)
+- [Responses API](/api/responses) (recommended alternative)

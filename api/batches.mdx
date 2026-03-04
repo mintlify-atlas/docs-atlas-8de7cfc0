@@ -1,0 +1,234 @@
+---
+title: Batches
+description: Process large volumes of API requests asynchronously with 50% cost savings
+---
+
+## Overview
+
+The Batch API allows you to submit multiple API requests in a single batch for asynchronous processing. Batches offer 50% cost savings and a separate pool of significantly higher rate limits.
+
+## Create batch
+
+Creates and executes a batch from an uploaded file of requests.
+
+```ruby
+batch = client.batches.create(
+  input_file_id: "file-abc123",
+  endpoint: "/v1/responses",
+  completion_window: "24h"
+)
+```
+
+### Parameters
+
+<ParamField path="input_file_id" type="string" required>
+  The ID of an uploaded file containing requests for the batch. Each line must be a valid JSON object with:
+  - `custom_id` - Your identifier for the request
+  - `method` - HTTP method (currently only `POST`)
+  - `url` - The endpoint path
+  - `body` - Request parameters
+</ParamField>
+
+<ParamField path="endpoint" type="string" required>
+  The API endpoint for all requests in the batch. Currently supported:
+  - `/v1/responses` - Responses API
+  - `/v1/embeddings` - Embeddings API
+</ParamField>
+
+<ParamField path="completion_window" type="string" required>
+  Time frame for processing. Currently only `24h` is supported.
+</ParamField>
+
+<ParamField path="metadata" type="hash">
+  Optional metadata (up to 16 key-value pairs)
+</ParamField>
+
+<ParamField path="output_expires_after" type="object">
+  Expiration policy for output/error files
+  
+  <Expandable title="Properties">
+    <ParamField path="anchor" type="string">
+      When expiration starts. Use `completed_at`
+    </ParamField>
+    
+    <ParamField path="days" type="integer">
+      Number of days until expiration (1-90)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Response
+
+Returns a `Batch` object:
+
+<ResponseField name="id" type="string">
+  Unique batch identifier
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status: `validating`, `failed`, `in_progress`, `finalizing`, `completed`, `expired`, `cancelling`, or `cancelled`
+</ResponseField>
+
+<ResponseField name="input_file_id" type="string">
+  ID of the input file
+</ResponseField>
+
+<ResponseField name="output_file_id" type="string">
+  ID of the output file (available when completed)
+</ResponseField>
+
+<ResponseField name="error_file_id" type="string">
+  ID of the error file (if any requests failed)
+</ResponseField>
+
+<ResponseField name="request_counts" type="object">
+  Request counts by status:
+  
+  <Expandable title="Properties">
+    <ResponseField name="total" type="integer">
+      Total number of requests
+    </ResponseField>
+    
+    <ResponseField name="completed" type="integer">
+      Successfully completed requests
+    </ResponseField>
+    
+    <ResponseField name="failed" type="integer">
+      Failed requests
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Retrieve batch
+
+Retrieves a batch by ID.
+
+```ruby
+batch = client.batches.retrieve("batch_abc123")
+puts batch.status
+```
+
+### Parameters
+
+<ParamField path="batch_id" type="string" required>
+  The ID of the batch to retrieve
+</ParamField>
+
+## List batches
+
+Lists your organization's batches.
+
+```ruby
+batches = client.batches.list(limit: 10)
+
+batches.data.each do |batch|
+  puts "#{batch.id}: #{batch.status}"
+end
+```
+
+### Parameters
+
+<ParamField path="limit" type="integer">
+  Number of objects to return (1-100, default: 20)
+</ParamField>
+
+<ParamField path="after" type="string">
+  Cursor for pagination
+</ParamField>
+
+## Cancel batch
+
+Cancels an in-progress batch. The batch will move to `cancelling` status for up to 10 minutes before becoming `cancelled`.
+
+```ruby
+batch = client.batches.cancel("batch_abc123")
+puts batch.status # => "cancelling"
+```
+
+### Parameters
+
+<ParamField path="batch_id" type="string" required>
+  The ID of the batch to cancel
+</ParamField>
+
+## Examples
+
+### Complete batch workflow
+
+<CodeGroup>
+```ruby Prepare input file
+# Create JSONL file with requests
+requests = [
+  {
+    custom_id: "request-1",
+    method: "POST",
+    url: "/v1/responses",
+    body: {
+      model: "gpt-4o",
+      input: "What is the capital of France?"
+    }
+  },
+  {
+    custom_id: "request-2",
+    method: "POST",
+    url: "/v1/responses",
+    body: {
+      model: "gpt-4o",
+      input: "What is 2+2?"
+    }
+  }
+]
+
+# Write to file
+File.open("batch_requests.jsonl", "w") do |f|
+  requests.each { |req| f.puts(req.to_json) }
+end
+```
+
+```ruby Upload and submit
+# Upload the file
+file = client.files.create(
+  file: "batch_requests.jsonl",
+  purpose: "batch"
+)
+
+# Create the batch
+batch = client.batches.create(
+  input_file_id: file.id,
+  endpoint: "/v1/responses",
+  completion_window: "24h"
+)
+
+puts "Batch created: #{batch.id}"
+```
+
+```ruby Check status
+# Poll for completion
+loop do
+  batch = client.batches.retrieve(batch.id)
+  puts "Status: #{batch.status}"
+  
+  break if %w[completed failed cancelled].include?(batch.status)
+  sleep 60
+end
+```
+
+```ruby Download results
+# Get the output file
+if batch.status == "completed"
+  output_file = client.files.retrieve(batch.output_file_id)
+  content = client.files.content(batch.output_file_id)
+  
+  # Parse results
+  results = content.split("\n").map { |line| JSON.parse(line) }
+  results.each do |result|
+    puts "#{result['custom_id']}: #{result['response']['body']}"
+  end
+end
+```
+</CodeGroup>
+
+## Related
+
+- [Batch API guide](https://platform.openai.com/docs/guides/batch)
+- [Files API](/api/files)

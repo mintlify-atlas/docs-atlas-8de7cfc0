@@ -1,0 +1,270 @@
+---
+title: "Fine-Tuning"
+description: "Create and manage fine-tuning jobs to customize models with the OpenAI Ruby SDK"
+---
+
+## Create a Fine-Tuning Job
+
+Start a fine-tuning job to create a custom model trained on your data.
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+job = client.fine_tuning.jobs.create(
+  model: "gpt-4o-mini",
+  training_file: "file-abc123"
+)
+
+puts "Job ID: #{job.id}"
+puts "Status: #{job.status}"
+```
+
+<Note>
+  Before creating a fine-tuning job, you must first upload a training file using the Files API. Learn more in the [file uploads guide](/examples/file-operations).
+</Note>
+
+## Fine-Tuning with Hyperparameters
+
+Customize the training process with hyperparameters.
+
+```ruby
+job = client.fine_tuning.jobs.create(
+  model: "gpt-4o-mini",
+  training_file: "file-abc123",
+  hyperparameters: {
+    n_epochs: 3,
+    batch_size: 8,
+    learning_rate_multiplier: 0.1
+  },
+  suffix: "my-custom-model"
+)
+
+puts "Job created: #{job.id}"
+puts "Model name will be: #{job.fine_tuned_model || 'pending'}"
+```
+
+## List Fine-Tuning Jobs
+
+Retrieve all fine-tuning jobs for your organization.
+
+```ruby
+page = client.fine_tuning.jobs.list(limit: 20)
+
+# Access first job from page
+job = page.data[0]
+puts job.id
+
+# Automatically fetch all jobs across pages
+page.auto_paging_each do |job|
+  puts "Job: #{job.id} - Status: #{job.status}"
+end
+```
+
+## Retrieve a Fine-Tuning Job
+
+Get detailed information about a specific fine-tuning job.
+
+```ruby
+job = client.fine_tuning.jobs.retrieve("ft-AF1WoRqd3aJAHsqc9NY7iL8F")
+
+puts "Job ID: #{job.id}"
+puts "Model: #{job.model}"
+puts "Status: #{job.status}"
+puts "Created at: #{Time.at(job.created_at)}"
+puts "Fine-tuned model: #{job.fine_tuned_model}"
+puts "Trained tokens: #{job.trained_tokens}"
+```
+
+## Monitor Job Events
+
+Track the progress of a fine-tuning job by retrieving its events.
+
+```ruby
+events = client.fine_tuning.jobs.list_events(
+  "ft-AF1WoRqd3aJAHsqc9NY7iL8F",
+  limit: 10
+)
+
+events.auto_paging_each do |event|
+  puts "[#{event.level}] #{Time.at(event.created_at)}: #{event.message}"
+end
+```
+
+<Steps>
+  <Step title="Upload training data">
+    Use the Files API to upload your JSONL training file.
+    ```ruby
+    file = client.files.create(
+      file: Pathname("training_data.jsonl"),
+      purpose: "fine-tune"
+    )
+    ```
+  </Step>
+  <Step title="Create fine-tuning job">
+    Start the fine-tuning process with your uploaded file.
+    ```ruby
+    job = client.fine_tuning.jobs.create(
+      model: "gpt-4o-mini",
+      training_file: file.id
+    )
+    ```
+  </Step>
+  <Step title="Monitor progress">
+    Check job status and events periodically.
+    ```ruby
+    job = client.fine_tuning.jobs.retrieve(job.id)
+    puts job.status
+    ```
+  </Step>
+  <Step title="Use fine-tuned model">
+    Once complete, use your custom model for completions.
+    ```ruby
+    response = client.chat.completions.create(
+      model: job.fine_tuned_model,
+      messages: [{role: "user", content: "Hello!"}]
+    )
+    ```
+  </Step>
+</Steps>
+
+## Cancel a Fine-Tuning Job
+
+Stop a running fine-tuning job before completion.
+
+```ruby
+job = client.fine_tuning.jobs.cancel("ft-AF1WoRqd3aJAHsqc9NY7iL8F")
+
+puts "Job #{job.id} status: #{job.status}"  # Should be "cancelled"
+```
+
+## Pause and Resume Jobs
+
+Temporarily pause and later resume a fine-tuning job.
+
+<CodeGroup>
+```ruby Pause Job
+job = client.fine_tuning.jobs.pause("ft-AF1WoRqd3aJAHsqc9NY7iL8F")
+
+puts "Job paused: #{job.status}"
+```
+
+```ruby Resume Job
+job = client.fine_tuning.jobs.resume("ft-AF1WoRqd3aJAHsqc9NY7iL8F")
+
+puts "Job resumed: #{job.status}"
+```
+</CodeGroup>
+
+## Pagination
+
+Work with paginated results for jobs and events.
+
+```ruby
+page = client.fine_tuning.jobs.list(limit: 20)
+
+# Check if there are more pages
+if page.next_page?
+  new_page = page.next_page
+  puts new_page.data[0].id
+end
+
+# Or iterate through all pages automatically
+page.auto_paging_each do |job|
+  puts job.id
+end
+```
+
+## List Job Checkpoints
+
+Retrieve checkpoints created during the fine-tuning process.
+
+```ruby
+checkpoints = client.fine_tuning.jobs.checkpoints.list(
+  "ft-AF1WoRqd3aJAHsqc9NY7iL8F"
+)
+
+checkpoints.auto_paging_each do |checkpoint|
+  puts "Checkpoint: #{checkpoint.id}"
+  puts "Step: #{checkpoint.step_number}"
+  puts "Metrics: #{checkpoint.metrics}"
+end
+```
+
+## Fine-Tuning with Validation File
+
+Provide a validation file to monitor overfitting during training.
+
+```ruby
+# Upload validation file
+validation_file = client.files.create(
+  file: Pathname("validation_data.jsonl"),
+  purpose: "fine-tune"
+)
+
+# Create job with validation
+job = client.fine_tuning.jobs.create(
+  model: "gpt-4o-mini",
+  training_file: "file-abc123",
+  validation_file: validation_file.id,
+  hyperparameters: {
+    n_epochs: 3
+  }
+)
+
+puts "Training file: #{job.training_file}"
+puts "Validation file: #{job.validation_file}"
+```
+
+## Integration with Weights & Biases
+
+Track fine-tuning metrics with Weights & Biases integration.
+
+```ruby
+job = client.fine_tuning.jobs.create(
+  model: "gpt-4o-mini",
+  training_file: "file-abc123",
+  integrations: [
+    {
+      type: "wandb",
+      wandb: {
+        project: "my-fine-tuning-project",
+        name: "gpt-4o-mini-custom",
+        tags: ["production", "v1"]
+      }
+    }
+  ]
+)
+```
+
+<Note>
+  Weights & Biases integration requires you to set up the integration in your OpenAI organization settings first.
+</Note>
+
+## Error Handling
+
+Handle errors that may occur during fine-tuning.
+
+```ruby
+begin
+  job = client.fine_tuning.jobs.create(
+    model: "gpt-4o-mini",
+    training_file: "file-abc123"
+  )
+rescue OpenAI::Errors::APIConnectionError => e
+  puts "Server could not be reached: #{e.cause}"
+rescue OpenAI::Errors::RateLimitError => e
+  puts "Rate limit exceeded, backing off"
+rescue OpenAI::Errors::APIStatusError => e
+  puts "API error: #{e.status} - #{e.message}"
+end
+
+# Check job for errors after completion
+job = client.fine_tuning.jobs.retrieve("ft-AF1WoRqd3aJAHsqc9NY7iL8F")
+
+if job.error
+  puts "Job failed: #{job.error.message}"
+  puts "Error code: #{job.error.code}"
+end
+```
