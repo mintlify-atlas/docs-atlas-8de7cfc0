@@ -1,0 +1,262 @@
+---
+title: Videos
+description: Generate videos from text prompts using Sora models
+---
+
+The Videos API allows you to generate videos from text prompts using OpenAI's Sora video generation models.
+
+## Create Video
+
+Generate a new video from a text prompt:
+
+```ruby
+video = client.videos.create(
+  prompt: "A serene sunset over a mountain lake with gentle waves",
+  model: "sora-2",
+  seconds: 8,
+  size: "1280x720"
+)
+
+puts video.id
+# => "video_abc123"
+puts video.status
+# => "in_progress"
+```
+
+<ParamField path="prompt" type="string" required>
+  Text description of the video to generate.
+</ParamField>
+
+<ParamField path="model" type="string">
+  The video generation model to use. Options:
+  - `sora-2` (default)
+  - `sora-2-pro`
+</ParamField>
+
+<ParamField path="seconds" type="integer">
+  Clip duration in seconds. Options: `4`, `8`, `12`. Default: `4`.
+</ParamField>
+
+<ParamField path="size" type="string">
+  Output resolution. Options:
+  - `720x1280` (portrait)
+  - `1280x720` (landscape, default)
+  - `1024x1024` (square)
+</ParamField>
+
+<ParamField path="input_reference" type="file">
+  Optional image reference to guide generation. Accepts `Pathname`, `StringIO`, `IO`, or file content string.
+</ParamField>
+
+## With Image Reference
+
+Guide video generation with a reference image:
+
+```ruby
+require "pathname"
+
+video = client.videos.create(
+  prompt: "Pan across this landscape at golden hour",
+  input_reference: Pathname("landscape.jpg"),
+  model: "sora-2-pro",
+  seconds: 12
+)
+```
+
+## Retrieve Video
+
+Check the status and metadata of a video generation:
+
+```ruby
+video = client.videos.retrieve("video_abc123")
+
+puts video.status
+# => "completed"
+puts video.url
+# => "https://..."
+```
+
+<ResponseField name="id" type="string">
+  Video identifier.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Generation status: `in_progress`, `completed`, or `failed`.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Download URL for the completed video (only present when status is `completed`).
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp of when the video was created.
+</ResponseField>
+
+## List Videos
+
+Retrieve recently generated videos:
+
+```ruby
+videos = client.videos.list(limit: 10, order: "desc")
+
+videos.each do |video|
+  puts "#{video.id}: #{video.status}"
+end
+
+# Pagination
+if videos.next_page?
+  next_page = videos.next_page
+end
+```
+
+<ParamField path="limit" type="integer">
+  Number of videos to retrieve (default: 20, max: 100).
+</ParamField>
+
+<ParamField path="order" type="string">
+  Sort order: `asc` or `desc` (default).
+</ParamField>
+
+<ParamField path="after" type="string">
+  Cursor for pagination (from previous response).
+</ParamField>
+
+## Download Video
+
+Download the generated video content:
+
+```ruby
+video = client.videos.retrieve("video_abc123")
+
+# Wait for completion
+until video.status == "completed"
+  sleep 5
+  video = client.videos.retrieve(video.id)
+end
+
+# Download the video
+content = client.videos.download_content(video.id)
+
+# Save to file
+File.open("generated_video.mp4", "wb") do |file|
+  file.write(content.read)
+end
+```
+
+<ParamField path="video_id" type="string" required>
+  The ID of the video to download.
+</ParamField>
+
+<ParamField path="variant" type="string">
+  Which asset to download. Default is the full MP4 video.
+</ParamField>
+
+## Remix Video
+
+Create a variation of a completed video with a new prompt:
+
+```ruby
+original = client.videos.retrieve("video_abc123")
+
+remix = client.videos.remix(
+  original.id,
+  prompt: "Same scene but during a thunderstorm with lightning"
+)
+
+puts remix.id
+# => "video_def456"
+```
+
+<ParamField path="video_id" type="string" required>
+  The ID of the completed video to remix.
+</ParamField>
+
+<ParamField path="prompt" type="string" required>
+  Updated prompt directing the remix generation.
+</ParamField>
+
+## Delete Video
+
+Permanently delete a video and its assets:
+
+```ruby
+result = client.videos.delete("video_abc123")
+
+puts result.deleted
+# => true
+```
+
+## Complete Example
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+# Generate a video
+video = client.videos.create(
+  prompt: "A robot exploring an alien planet with two moons in the sky",
+  model: "sora-2-pro",
+  seconds: 8,
+  size: "1280x720"
+)
+
+puts "Video generation started: #{video.id}"
+
+# Poll for completion
+loop do
+  video = client.videos.retrieve(video.id)
+  
+  case video.status
+  when "completed"
+    puts "Video completed!"
+    break
+  when "failed"
+    puts "Video generation failed"
+    exit 1
+  else
+    puts "Status: #{video.status}"
+    sleep 10
+  end
+end
+
+# Download the video
+content = client.videos.download_content(video.id)
+File.open("robot_planet.mp4", "wb") { |f| f.write(content.read) }
+
+puts "Video saved to robot_planet.mp4"
+```
+
+## Error Handling
+
+Handle video generation errors:
+
+```ruby
+begin
+  video = client.videos.create(
+    prompt: "Video description",
+    model: "sora-2"
+  )
+rescue OpenAI::Errors::BadRequestError => e
+  puts "Invalid request: #{e.message}"
+rescue OpenAI::Errors::RateLimitError => e
+  puts "Rate limit exceeded. Try again later."
+end
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Images API" icon="image" href="/api/images">
+    Generate images with DALL-E
+  </Card>
+  <Card title="Audio API" icon="volume" href="/api/audio">
+    Generate speech and transcribe audio
+  </Card>
+  <Card title="Responses API" icon="message" href="/api/responses">
+    Multi-modal responses
+  </Card>
+  <Card title="File Uploads" icon="cloud-arrow-up" href="/advanced/file-uploads">
+    Upload reference images
+  </Card>
+</CardGroup>

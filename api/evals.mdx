@@ -1,0 +1,362 @@
+---
+title: Evals
+description: Test and evaluate model performance with structured evaluations
+---
+
+The Evals API allows you to create, run, and manage evaluations to test model performance against specific criteria using various data sources and grading methods.
+
+## Create Evaluation
+
+Define an evaluation with testing criteria and data source configuration:
+
+```ruby
+eval = client.evals.create(
+  name: "Customer support quality evaluation",
+  data_source_config: {
+    type: "stored_completions",
+    completion_ids: ["comp_abc123", "comp_def456"]
+  },
+  testing_criteria: [
+    {
+      type: "label_model",
+      name: "response_quality",
+      instructions: "Rate the helpfulness of the response",
+      model: "gpt-4"
+    }
+  ]
+)
+
+puts eval.id
+# => "eval_abc123"
+```
+
+<ParamField path="name" type="string">
+  Descriptive name for the evaluation.
+</ParamField>
+
+<ParamField path="data_source_config" type="object" required>
+  Configuration for the data source. Options:
+  - `stored_completions` - Use existing completion IDs
+  - `custom` - Upload custom evaluation data
+  - `logs` - Use logged completions
+</ParamField>
+
+<ParamField path="testing_criteria" type="array" required>
+  List of graders to evaluate responses. Supported types:
+  - `label_model` - Model-based classification grader
+  - `score_model` - Model-based scoring grader
+  - `string_check` - Exact string matching
+  - `text_similarity` - Semantic similarity comparison
+  - `python` - Custom Python grading logic
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  Key-value pairs for attaching metadata (up to 16 pairs).
+</ParamField>
+
+## Retrieve Evaluation
+
+Get an evaluation by ID:
+
+```ruby
+eval = client.evals.retrieve("eval_abc123")
+
+puts eval.name
+puts eval.testing_criteria.size
+```
+
+## Update Evaluation
+
+Modify evaluation properties:
+
+```ruby
+updated = client.evals.update(
+  "eval_abc123",
+  name: "Updated evaluation name",
+  metadata: { version: "2.0" }
+)
+```
+
+<ParamField path="eval_id" type="string" required>
+  The ID of the evaluation to update.
+</ParamField>
+
+<ParamField path="name" type="string">
+  New name for the evaluation.
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  Updated metadata key-value pairs.
+</ParamField>
+
+## List Evaluations
+
+Retrieve all evaluations for your project:
+
+```ruby
+evals = client.evals.list(
+  limit: 20,
+  order: "desc",
+  order_by: "created_at"
+)
+
+evals.auto_paging_each do |eval|
+  puts "#{eval.name}: #{eval.id}"
+end
+```
+
+<ParamField path="limit" type="integer">
+  Number of evaluations to retrieve (default: 20).
+</ParamField>
+
+<ParamField path="order" type="string">
+  Sort order: `asc` or `desc` (default).
+</ParamField>
+
+<ParamField path="order_by" type="string">
+  Field to sort by: `created_at` or `updated_at`.
+</ParamField>
+
+<ParamField path="after" type="string">
+  Cursor for pagination.
+</ParamField>
+
+## Delete Evaluation
+
+Permanently delete an evaluation:
+
+```ruby
+result = client.evals.delete("eval_abc123")
+
+puts result.deleted
+# => true
+```
+
+## Run Evaluation
+
+Execute an evaluation run on specific model parameters:
+
+```ruby
+run = client.evals.runs.create(
+  "eval_abc123",
+  model: "gpt-4",
+  parameters: {
+    temperature: 0.7,
+    max_tokens: 500
+  }
+)
+
+puts run.id
+# => "evalrun_xyz789"
+puts run.status
+# => "in_progress"
+```
+
+## Retrieve Run Results
+
+Check run status and get results:
+
+```ruby
+run = client.evals.runs.retrieve("eval_abc123", "evalrun_xyz789")
+
+if run.status == "completed"
+  puts "Success rate: #{run.metrics[:success_rate]}"
+  puts "Average score: #{run.metrics[:avg_score]}"
+end
+```
+
+## List Run Output Items
+
+Get detailed results for each evaluated item:
+
+```ruby
+outputs = client.evals.runs.output_items.list(
+  "eval_abc123",
+  "evalrun_xyz789"
+)
+
+outputs.each do |item|
+  puts "Input: #{item.input}"
+  puts "Output: #{item.output}"
+  puts "Score: #{item.score}"
+end
+```
+
+## Cancel Run
+
+Stop a running evaluation:
+
+```ruby
+cancelled = client.evals.runs.cancel("eval_abc123", "evalrun_xyz789")
+
+puts cancelled.status
+# => "cancelled"
+```
+
+## Testing Criteria Examples
+
+<Tabs>
+  <Tab title="Label Model Grader">
+    ```ruby
+    testing_criteria: [
+      {
+        type: "label_model",
+        name: "sentiment",
+        instructions: "Classify the sentiment as positive, negative, or neutral",
+        labels: ["positive", "negative", "neutral"],
+        model: "gpt-4"
+      }
+    ]
+    ```
+  </Tab>
+  
+  <Tab title="Score Model Grader">
+    ```ruby
+    testing_criteria: [
+      {
+        type: "score_model",
+        name: "quality",
+        instructions: "Rate the response quality from 1-10",
+        min_score: 1,
+        max_score: 10,
+        model: "gpt-4"
+      }
+    ]
+    ```
+  </Tab>
+  
+  <Tab title="String Check">
+    ```ruby
+    testing_criteria: [
+      {
+        type: "string_check",
+        name: "contains_keyword",
+        expected_string: "refund policy",
+        match_type: "contains"
+      }
+    ]
+    ```
+  </Tab>
+  
+  <Tab title="Text Similarity">
+    ```ruby
+    testing_criteria: [
+      {
+        type: "text_similarity",
+        name: "answer_accuracy",
+        reference_text: "Expected answer text",
+        threshold: 0.8
+      }
+    ]
+    ```
+  </Tab>
+</Tabs>
+
+## Data Source Types
+
+<AccordionGroup>
+  <Accordion title="Stored Completions">
+    Use existing completion IDs from your API usage:
+    ```ruby
+    data_source_config: {
+      type: "stored_completions",
+      completion_ids: ["comp_1", "comp_2", "comp_3"]
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Custom Data">
+    Upload a JSONL file with custom test cases:
+    ```ruby
+    data_source_config: {
+      type: "custom",
+      file_id: "file_abc123"
+    }
+    ```
+    
+    JSONL format:
+    ```json
+    {"input": "test question 1", "expected": "answer 1"}
+    {"input": "test question 2", "expected": "answer 2"}
+    ```
+  </Accordion>
+
+  <Accordion title="Logs Data Source">
+    Evaluate recent logged completions:
+    ```ruby
+    data_source_config: {
+      type: "logs",
+      start_time: Time.now - 86400,  # Last 24 hours
+      end_time: Time.now,
+      filters: { model: "gpt-4" }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Complete Example
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+# Create evaluation
+eval = client.evals.create(
+  name: "Support response quality",
+  data_source_config: {
+    type: "custom",
+    file_id: "file_test_cases"
+  },
+  testing_criteria: [
+    {
+      type: "score_model",
+      name: "helpfulness",
+      instructions: "Rate how helpful this response is from 1-5",
+      min_score: 1,
+      max_score: 5,
+      model: "gpt-4"
+    }
+  ],
+  metadata: { team: "customer-support" }
+)
+
+# Run evaluation
+run = client.evals.runs.create(
+  eval.id,
+  model: "gpt-4o",
+  parameters: { temperature: 0.7 }
+)
+
+# Poll for completion
+loop do
+  run = client.evals.runs.retrieve(eval.id, run.id)
+  break if run.status == "completed"
+  sleep 5
+end
+
+# Get results
+puts "Average helpfulness: #{run.metrics[:avg_score]}"
+
+outputs = client.evals.runs.output_items.list(eval.id, run.id)
+outputs.each do |item|
+  puts "Score: #{item.score} - #{item.output}"
+end
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Fine-tuning" icon="sliders" href="/api/fine-tuning">
+    Train custom models
+  </Card>
+  <Card title="Batches" icon="layer-group" href="/api/batches">
+    Batch API requests
+  </Card>
+  <Card title="Files" icon="file" href="/api/files">
+    Upload evaluation data
+  </Card>
+  <Card title="Evals Guide" icon="arrow-up-right-from-square" href="https://platform.openai.com/docs/guides/evals">
+    Comprehensive evals guide
+  </Card>
+</CardGroup>

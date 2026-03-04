@@ -1,0 +1,332 @@
+---
+title: Containers
+description: Create isolated execution environments for code and skills
+---
+
+The Containers API allows you to create isolated execution environments with controlled network access, file systems, and resource limits for running code safely.
+
+## Create Container
+
+Create a new container with optional files and skills:
+
+```ruby
+container = client.containers.create(
+  name: "data-processing",
+  memory_limit: "2g",
+  file_ids: ["file_abc123"],
+  network_policy: {
+    type: "allowlist",
+    domains: ["api.example.com"]
+  }
+)
+
+puts container.id
+# => "container_xyz789"
+```
+
+<ParamField path="name" type="string" required>
+  Descriptive name for the container.
+</ParamField>
+
+<ParamField path="memory_limit" type="string">
+  Memory limit for the container. Options: `512m`, `1g`, `2g`, `4g`. Default: `1g`.
+</ParamField>
+
+<ParamField path="file_ids" type="array<string>">
+  IDs of files to copy into the container at creation.
+</ParamField>
+
+<ParamField path="network_policy" type="object">
+  Network access configuration:
+  - `{ type: "disabled" }` - No network access (default)
+  - `{ type: "allowlist", domains: [...] }` - Allow specific domains
+</ParamField>
+
+<ParamField path="skills" type="array">
+  Skills to install in the container (by ID or inline definition).
+</ParamField>
+
+<ParamField path="expires_after" type="object">
+  Expiration policy with `anchor` and `seconds` fields.
+</ParamField>
+
+## Retrieve Container
+
+Get container details and status:
+
+```ruby
+container = client.containers.retrieve("container_xyz789")
+
+puts container.name
+puts container.status
+# => "ready"
+```
+
+<ResponseField name="id" type="string">
+  Container identifier.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Container name.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status: `initializing`, `ready`, `terminated`, or `failed`.
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp of creation.
+</ResponseField>
+
+<ResponseField name="memory_limit" type="string">
+  Configured memory limit.
+</ResponseField>
+
+## List Containers
+
+Retrieve all containers for your project:
+
+```ruby
+containers = client.containers.list(
+  limit: 20,
+  order: "desc"
+)
+
+containers.auto_paging_each do |container|
+  puts "#{container.name}: #{container.status}"
+end
+```
+
+<ParamField path="limit" type="integer">
+  Number of containers to retrieve (default: 20, max: 100).
+</ParamField>
+
+<ParamField path="name" type="string">
+  Filter by container name.
+</ParamField>
+
+<ParamField path="order" type="string">
+  Sort order by creation time: `asc` or `desc` (default).
+</ParamField>
+
+<ParamField path="after" type="string">
+  Cursor for pagination.
+</ParamField>
+
+## Delete Container
+
+Permanently delete a container:
+
+```ruby
+client.containers.delete("container_xyz789")
+```
+
+## Container Files
+
+Upload files to a running container:
+
+```ruby
+require "pathname"
+
+# Upload a file to the container
+file = client.containers.files.create(
+  "container_xyz789",
+  file: Pathname("script.py"),
+  path: "/workspace/script.py"
+)
+
+puts file.path
+# => "/workspace/script.py"
+```
+
+### List Container Files
+
+List files in a container:
+
+```ruby
+files = client.containers.files.list("container_xyz789")
+
+files.each do |file|
+  puts "#{file.path} (#{file.size} bytes)"
+end
+```
+
+### Retrieve File Content
+
+Download a file from the container:
+
+```ruby
+content = client.containers.files.content.retrieve(
+  "container_xyz789",
+  "file_abc123"
+)
+
+puts content.read
+```
+
+### Delete Container File
+
+Remove a file from the container:
+
+```ruby
+client.containers.files.delete(
+  "container_xyz789",
+  "file_abc123"
+)
+```
+
+## Network Policies
+
+<Tabs>
+  <Tab title="Disabled (Default)">
+    ```ruby
+    container = client.containers.create(
+      name: "isolated",
+      network_policy: {
+        type: "disabled"
+      }
+    )
+    ```
+    
+    No outbound network access allowed.
+  </Tab>
+  
+  <Tab title="Allowlist">
+    ```ruby
+    container = client.containers.create(
+      name: "api-client",
+      network_policy: {
+        type: "allowlist",
+        domains: [
+          "api.example.com",
+          "cdn.example.com"
+        ],
+        domain_secrets: {
+          "api.example.com" => {
+            "Authorization" => "Bearer token123"
+          }
+        }
+      }
+    )
+    ```
+    
+    Allow access to specific domains with optional authentication headers.
+  </Tab>
+</Tabs>
+
+## Skills in Containers
+
+Install skills for additional functionality:
+
+```ruby
+container = client.containers.create(
+  name: "with-skills",
+  skills: [
+    # Reference skill by ID
+    { skill_id: "skill_abc123" },
+    
+    # Or define inline
+    {
+      type: "inline",
+      source: {
+        files: [
+          {
+            path: "helper.py",
+            content: "def process(data): return data.upper()"
+          }
+        ]
+      }
+    }
+  ]
+)
+```
+
+## Complete Example
+
+```ruby
+require "openai"
+require "pathname"
+
+client = OpenAI::Client.new
+
+# Create container with network access
+container = client.containers.create(
+  name: "data-processor",
+  memory_limit: "2g",
+  network_policy: {
+    type: "allowlist",
+    domains: ["api.weatherapi.com"]
+  },
+  file_ids: ["file_data_abc123"]
+)
+
+puts "Container created: #{container.id}"
+
+# Upload processing script
+script = client.containers.files.create(
+  container.id,
+  file: Pathname("process.py"),
+  path: "/workspace/process.py"
+)
+
+puts "Script uploaded: #{script.path}"
+
+# Use container in Responses API
+response = client.responses.create(
+  model: "gpt-4",
+  input: "Process the uploaded data",
+  tools: [{
+    type: "code_interpreter",
+    container: { container_id: container.id }
+  }]
+)
+
+puts response.output.first.content
+
+# Cleanup
+client.containers.delete(container.id)
+```
+
+## Resource Limits
+
+<Info>
+Containers have the following resource limits:
+
+- **Memory**: 512 MB to 4 GB (configurable)
+- **CPU**: Shared, no dedicated cores
+- **Disk**: 10 GB ephemeral storage
+- **Lifetime**: 1 hour by default (configurable up to 24 hours)
+- **Network**: Controlled by network policy
+</Info>
+
+## Error Handling
+
+```ruby
+begin
+  container = client.containers.create(
+    name: "test",
+    memory_limit: "2g"
+  )
+rescue OpenAI::Errors::BadRequestError => e
+  puts "Invalid request: #{e.message}"
+rescue OpenAI::Errors::APIError => e
+  puts "API error: #{e.message}"
+end
+```
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Skills" icon="puzzle-piece" href="/api/skills">
+    Manage reusable skills
+  </Card>
+  <Card title="Files" icon="file" href="/api/files">
+    Upload container files
+  </Card>
+  <Card title="Responses API" icon="message" href="/api/responses">
+    Use containers with code execution
+  </Card>
+  <Card title="Code Interpreter" icon="code" href="/examples/responses/basic">
+    Execute code in responses
+  </Card>
+</CardGroup>

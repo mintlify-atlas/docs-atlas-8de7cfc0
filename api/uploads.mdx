@@ -1,0 +1,201 @@
+---
+title: Uploads
+description: Upload large files in parts using the multipart upload API
+---
+
+The Uploads API allows you to upload large files in parts, which is useful for files larger than the standard file upload limit. An upload can accept up to 8 GB in total and expires after an hour.
+
+## Create Upload
+
+Create an intermediate upload object to which you can add parts.
+
+```ruby
+upload = client.uploads.create(
+  bytes: 1024 * 1024 * 100,  # 100 MB
+  filename: "training_data.jsonl",
+  mime_type: "application/jsonl",
+  purpose: "fine-tune"
+)
+
+puts upload.id
+# => "upload_abc123"
+```
+
+<ParamField path="bytes" type="integer" required>
+  The total number of bytes in the file you are uploading.
+</ParamField>
+
+<ParamField path="filename" type="string" required>
+  The name of the file to upload.
+</ParamField>
+
+<ParamField path="mime_type" type="string" required>
+  The MIME type of the file. Must match the purpose requirements.
+</ParamField>
+
+<ParamField path="purpose" type="string" required>
+  The intended purpose of the uploaded file. Options: `assistants`, `batch`, `fine-tune`, `vision`.
+</ParamField>
+
+<ParamField path="expires_after" type="integer">
+  Number of seconds after which the upload expires (default: 1 hour).
+</ParamField>
+
+## Add Parts
+
+Upload file data in chunks using the parts subresource:
+
+```ruby
+# Upload first part
+part1 = client.uploads.parts.create(
+  upload.id,
+  data: File.read("chunk1.dat")
+)
+
+# Upload second part
+part2 = client.uploads.parts.create(
+  upload.id,
+  data: File.read("chunk2.dat")
+)
+```
+
+## Complete Upload
+
+Finalize the upload by providing the ordered list of part IDs:
+
+```ruby
+completed = client.uploads.complete(
+  upload.id,
+  part_ids: [part1.id, part2.id]
+)
+
+# The upload now includes a usable File object
+file = completed.file
+puts file.id
+# => "file-xyz789"
+```
+
+<ParamField path="upload_id" type="string" required>
+  The ID of the upload to complete.
+</ParamField>
+
+<ParamField path="part_ids" type="array<string>" required>
+  Ordered list of part IDs to assemble into the final file.
+</ParamField>
+
+<ParamField path="md5" type="string">
+  Optional MD5 checksum for verification.
+</ParamField>
+
+## Cancel Upload
+
+Cancel an upload before completion:
+
+```ruby
+cancelled = client.uploads.cancel(upload.id)
+
+puts cancelled.status
+# => "cancelled"
+```
+
+<ParamField path="upload_id" type="string" required>
+  The ID of the upload to cancel.
+</ParamField>
+
+## Complete Example
+
+```ruby
+require "openai"
+
+client = OpenAI::Client.new
+
+# Create the upload
+upload = client.uploads.create(
+  bytes: File.size("large_file.jsonl"),
+  filename: "large_file.jsonl",
+  mime_type: "application/jsonl",
+  purpose: "fine-tune"
+)
+
+# Upload in 10MB chunks
+chunk_size = 10 * 1024 * 1024
+part_ids = []
+
+File.open("large_file.jsonl", "rb") do |file|
+  while chunk = file.read(chunk_size)
+    part = client.uploads.parts.create(upload.id, data: chunk)
+    part_ids << part.id
+  end
+end
+
+# Complete the upload
+completed = client.uploads.complete(upload.id, part_ids: part_ids)
+
+puts "File uploaded: #{completed.file.id}"
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="When to use multipart uploads">
+    Use the Uploads API for files larger than 50 MB or when you need to:
+    - Upload files from multiple sources
+    - Resume interrupted uploads
+    - Verify data integrity with MD5 checksums
+  </Accordion>
+
+  <Accordion title="Optimal chunk size">
+    Use chunk sizes between 5 MB and 100 MB for optimal performance. Smaller chunks increase overhead; larger chunks may fail on slow connections.
+  </Accordion>
+
+  <Accordion title="Handling expiration">
+    Uploads expire after 1 hour by default. For long uploads:
+    - Monitor upload progress
+    - Implement retry logic
+    - Consider increasing `expires_after` if needed
+  </Accordion>
+</AccordionGroup>
+
+## Response Fields
+
+<ResponseField name="id" type="string">
+  The upload identifier.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status: `pending`, `completed`, or `cancelled`.
+</ResponseField>
+
+<ResponseField name="bytes" type="integer">
+  Total number of bytes for the upload.
+</ResponseField>
+
+<ResponseField name="file" type="object">
+  The created File object (only present after completion).
+  
+  <Expandable title="file">
+    <ResponseField name="id" type="string">
+      File identifier for use in API calls.
+    </ResponseField>
+    <ResponseField name="purpose" type="string">
+      The purpose of the file.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Files API" icon="file" href="/api/files">
+    Manage uploaded files
+  </Card>
+  <Card title="Fine-tuning" icon="sliders" href="/api/fine-tuning">
+    Use uploaded files for fine-tuning
+  </Card>
+  <Card title="File Uploads Guide" icon="cloud-arrow-up" href="/advanced/file-uploads">
+    File upload patterns and examples
+  </Card>
+  <Card title="Batch API" icon="layer-group" href="/api/batches">
+    Process batch requests
+  </Card>
+</CardGroup>

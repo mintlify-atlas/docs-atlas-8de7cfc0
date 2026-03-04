@@ -73,8 +73,10 @@
               "api/embeddings",
               "api/audio",
               "api/images",
+              "api/videos",
               "api/models",
               "api/files",
+              "api/uploads",
               "api/fine-tuning",
               "api/moderations",
               "api/batches",
@@ -82,7 +84,10 @@
               "api/assistants",
               "api/responses",
               "api/realtime",
-              "api/conversations"
+              "api/conversations",
+              "api/evals",
+              "api/containers",
+              "api/skills"
             ]
           },
           {

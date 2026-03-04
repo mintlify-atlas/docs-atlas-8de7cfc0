@@ -1,0 +1,403 @@
+---
+title: Skills
+description: Create and manage reusable code packages for containers and responses
+---
+
+The Skills API allows you to create, version, and manage reusable code packages that can be used across containers and responses.
+
+## Create Skill
+
+Upload skill files as a zip archive or directory:
+
+```ruby
+require "pathname"
+
+skill = client.skills.create(
+  files: Pathname("my_skill.zip")
+)
+
+puts skill.id
+# => "skill_abc123"
+puts skill.default_version
+# => "1"
+```
+
+<ParamField path="files" type="file | array<file>">
+  Either:
+  - A single zip file containing the skill code
+  - An array of files (directory upload)
+  
+  Accepts `Pathname`, `StringIO`, `IO`, or file content.
+</ParamField>
+
+## Create from Directory
+
+Upload multiple files as a skill:
+
+```ruby
+files = [
+  Pathname("skill/main.py"),
+  Pathname("skill/helpers.py"),
+  Pathname("skill/config.json")
+]
+
+skill = client.skills.create(files: files)
+```
+
+## Retrieve Skill
+
+Get skill details:
+
+```ruby
+skill = client.skills.retrieve("skill_abc123")
+
+puts skill.name
+puts skill.default_version
+puts skill.created_at
+```
+
+<ResponseField name="id" type="string">
+  Skill identifier.
+</ResponseField>
+
+<ResponseField name="default_version" type="string">
+  The version number that will be used by default.
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp of creation.
+</ResponseField>
+
+<ResponseField name="updated_at" type="integer">
+  Unix timestamp of last update.
+</ResponseField>
+
+## Update Skill
+
+Change the default version:
+
+```ruby
+updated = client.skills.update(
+  "skill_abc123",
+  default_version: "2"
+)
+
+puts updated.default_version
+# => "2"
+```
+
+<ParamField path="skill_id" type="string" required>
+  The ID of the skill to update.
+</ParamField>
+
+<ParamField path="default_version" type="string" required>
+  The version number to set as default.
+</ParamField>
+
+## List Skills
+
+Retrieve all skills for your project:
+
+```ruby
+skills = client.skills.list(
+  limit: 20,
+  order: "desc"
+)
+
+skills.auto_paging_each do |skill|
+  puts "#{skill.id} (v#{skill.default_version})"
+end
+```
+
+<ParamField path="limit" type="integer">
+  Number of skills to retrieve (default: 20, max: 100).
+</ParamField>
+
+<ParamField path="order" type="string">
+  Sort order by creation time: `asc` or `desc` (default).
+</ParamField>
+
+<ParamField path="after" type="string">
+  Cursor for pagination.
+</ParamField>
+
+## Delete Skill
+
+Permanently delete a skill and all its versions:
+
+```ruby
+result = client.skills.delete("skill_abc123")
+
+puts result.deleted
+# => true
+```
+
+## Skill Versions
+
+### Create New Version
+
+Upload a new version of an existing skill:
+
+```ruby
+version = client.skills.versions.create(
+  "skill_abc123",
+  files: Pathname("my_skill_v2.zip")
+)
+
+puts version.version
+# => "2"
+```
+
+### List Versions
+
+Get all versions of a skill:
+
+```ruby
+versions = client.skills.versions.list("skill_abc123")
+
+versions.each do |version|
+  puts "Version #{version.version} - #{version.created_at}"
+end
+```
+
+### Retrieve Version
+
+Get a specific version:
+
+```ruby
+version = client.skills.versions.retrieve(
+  "skill_abc123",
+  "2"
+)
+```
+
+### Delete Version
+
+Delete a specific version:
+
+```ruby
+client.skills.versions.delete("skill_abc123", "1")
+```
+
+## Skill Content
+
+### Retrieve Skill Content
+
+Download skill files:
+
+```ruby
+content = client.skills.content.retrieve("skill_abc123")
+
+# Save to file
+File.open("skill_download.zip", "wb") do |file|
+  file.write(content.read)
+end
+```
+
+### Retrieve Version Content
+
+Download a specific version:
+
+```ruby
+content = client.skills.versions.content.retrieve(
+  "skill_abc123",
+  "2"
+)
+```
+
+## Using Skills
+
+### In Containers
+
+Reference skills when creating containers:
+
+```ruby
+container = client.containers.create(
+  name: "with-skill",
+  skills: [
+    { skill_id: "skill_abc123" }
+  ]
+)
+```
+
+### In Responses
+
+Use skills in the Responses API:
+
+```ruby
+response = client.responses.create(
+  model: "gpt-4",
+  input: "Use the data processing skill",
+  tools: [{
+    type: "code_interpreter",
+    skills: [
+      { skill_id: "skill_abc123" }
+    ]
+  }]
+)
+```
+
+### Inline Skills
+
+Define skills inline without creating them first:
+
+```ruby
+response = client.responses.create(
+  model: "gpt-4",
+  input: "Process data",
+  tools: [{
+    type: "code_interpreter",
+    skills: [{
+      type: "inline",
+      source: {
+        files: [{
+          path: "helper.py",
+          content: "def transform(x): return x * 2"
+        }]
+      }
+    }]
+  }]
+)
+```
+
+## Skill Structure
+
+A skill package should follow this structure:
+
+```
+my_skill/
+├── main.py          # Entry point
+├── helpers.py       # Supporting modules
+├── requirements.txt # Python dependencies (optional)
+└── config.json      # Skill configuration (optional)
+```
+
+### Example Skill
+
+```python main.py
+"""Data processing skill"""
+
+def process_data(data):
+    """Main processing function"""
+    # Process the data
+    result = []
+    for item in data:
+        result.append(transform(item))
+    return result
+
+def transform(item):
+    """Transform a single item"""
+    return {
+        'id': item.get('id'),
+        'value': item.get('value', 0) * 2,
+        'processed': True
+    }
+
+# Export functions
+__all__ = ['process_data', 'transform']
+```
+
+## Complete Example
+
+```ruby
+require "openai"
+require "pathname"
+require "zip"
+
+client = OpenAI::Client.new
+
+# Create a skill from files
+skill = client.skills.create(
+  files: Pathname("data_processor.zip")
+)
+
+puts "Skill created: #{skill.id}"
+
+# Use in a container
+container = client.containers.create(
+  name: "processor",
+  skills: [{ skill_id: skill.id }]
+)
+
+# Use in responses
+response = client.responses.create(
+  model: "gpt-4",
+  input: "Process the dataset using the skill",
+  tools: [{
+    type: "code_interpreter",
+    container: { container_id: container.id },
+    skills: [{ skill_id: skill.id }]
+  }]
+)
+
+puts response.output.first.content
+
+# Create new version
+version2 = client.skills.versions.create(
+  skill.id,
+  files: Pathname("data_processor_v2.zip")
+)
+
+# Update default version
+client.skills.update(skill.id, default_version: version2.version)
+
+# List all versions
+versions = client.skills.versions.list(skill.id)
+puts "Total versions: #{versions.size}"
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Skill versioning">
+    - Use semantic versioning for skill versions
+    - Test new versions before updating the default
+    - Keep previous versions available for rollback
+    - Document breaking changes between versions
+  </Accordion>
+
+  <Accordion title="Dependencies">
+    Include a `requirements.txt` for Python dependencies:
+    ```
+    numpy>=1.20.0
+    pandas>=1.3.0
+    requests>=2.26.0
+    ```
+    
+    Dependencies are installed automatically when the skill loads.
+  </Accordion>
+
+  <Accordion title="Error handling">
+    Always include error handling in skill functions:
+    ```python
+    def process_data(data):
+        try:
+            return transform(data)
+        except Exception as e:
+            return {"error": str(e), "data": None}
+    ```
+  </Accordion>
+
+  <Accordion title="Skill size limits">
+    - Maximum skill size: 100 MB (compressed)
+    - Maximum 1,000 files per skill
+    - Use `.gitignore` patterns to exclude unnecessary files
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Containers" icon="box" href="/api/containers">
+    Create execution environments
+  </Card>
+  <Card title="Responses API" icon="message" href="/api/responses">
+    Use skills in responses
+  </Card>
+  <Card title="Files API" icon="file" href="/api/files">
+    Upload skill packages
+  </Card>
+  <Card title="Code Examples" icon="code" href="/examples/responses/basic">
+    Skill usage examples
+  </Card>
+</CardGroup>
