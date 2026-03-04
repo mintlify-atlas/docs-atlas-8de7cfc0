@@ -1,0 +1,159 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "OpenAI Ruby SDK",
+  "projectDescription": "Official Ruby SDK providing convenient access to the OpenAI REST API from Ruby 3.2.0+ applications",
+  "theme": "mint",
+  "primaryColor": "#10A37F",
+  "lightColor": "#1A7F64",
+  "darkColor": "#0D8A6F",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core/client",
+              "core/authentication",
+              "core/error-handling",
+              "core/retries",
+              "core/timeouts"
+            ]
+          },
+          {
+            "group": "Advanced Features",
+            "pages": [
+              "advanced/streaming",
+              "advanced/pagination",
+              "advanced/file-uploads",
+              "advanced/structured-outputs",
+              "advanced/webhooks",
+              "advanced/concurrency"
+            ]
+          },
+          {
+            "group": "Type Safety",
+            "pages": [
+              "types/sorbet",
+              "types/rbs",
+              "types/base-model"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Resources",
+            "pages": [
+              "api/chat",
+              "api/completions",
+              "api/embeddings",
+              "api/audio",
+              "api/images",
+              "api/models",
+              "api/files",
+              "api/fine-tuning",
+              "api/moderations",
+              "api/batches",
+              "api/vector-stores",
+              "api/assistants",
+              "api/responses",
+              "api/realtime",
+              "api/conversations"
+            ]
+          },
+          {
+            "group": "Client",
+            "pages": [
+              "api/client/initialization",
+              "api/client/configuration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Chat Completions",
+            "pages": [
+              "examples/chat/basic",
+              "examples/chat/streaming",
+              "examples/chat/structured-outputs",
+              "examples/chat/tools"
+            ]
+          },
+          {
+            "group": "Responses API",
+            "pages": [
+              "examples/responses/basic",
+              "examples/responses/streaming",
+              "examples/responses/structured-outputs"
+            ]
+          },
+          {
+            "group": "Other Examples",
+            "pages": [
+              "examples/image-generation",
+              "examples/audio-transcription",
+              "examples/embeddings",
+              "examples/fine-tuning"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Complete OpenAI API coverage with typed parameters",
+    "Server-sent events (SSE) streaming support",
+    "Automatic pagination with auto_paging_each",
+    "Structured outputs with BaseModel helpers",
+    "Webhook signature verification",
+    "Comprehensive type definitions (RBI, RBS, Yard)",
+    "Automatic retries with exponential backoff",
+    "Connection pooling with thread-safe client",
+    "File upload support with multiple formats",
+    "Assistants API and Realtime API support"
+  ],
+  "publicApiSurface": [
+    "OpenAI::Client.new",
+    "client.chat.completions.create",
+    "client.completions.create",
+    "client.embeddings.create",
+    "client.audio.speech.create",
+    "client.audio.transcriptions.create",
+    "client.audio.translations.create",
+    "client.images.generate",
+    "client.images.edit",
+    "client.models.list",
+    "client.files.create",
+    "client.fine_tuning.jobs.create",
+    "client.moderations.create",
+    "client.batches.create",
+    "client.vector_stores.create",
+    "client.beta.assistants.create",
+    "client.beta.threads.create",
+    "client.responses.create",
+    "client.responses.stream",
+    "client.realtime.sessions.create",
+    "client.conversations.create",
+    "client.webhooks.unwrap",
+    "client.webhooks.verify_signature",
+    "OpenAI::BaseModel",
+    "OpenAI::ArrayOf",
+    "OpenAI::EnumOf",
+    "OpenAI::UnionOf"
+  ]
+}
